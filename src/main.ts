@@ -1,0 +1,78 @@
+import 'primeicons/primeicons.css'
+import '@/utils/axios-auth';
+import './assets/main.css'
+
+import { createApp } from 'vue'
+import { createPinia } from 'pinia'
+import { initializeApp } from "firebase/app"
+import PrimeVue from 'primevue/config'
+import { definePreset } from '@primeuix/themes';
+import Aura from '@primeuix/themes/nora'
+import Menubar from 'primevue/menubar';
+import Button from 'primevue/button';
+import InputText from 'primevue/inputtext';
+import Message from 'primevue/message';
+import FloatLabel from 'primevue/floatlabel';
+import AutoComplete from 'primevue/autocomplete';
+import Card from 'primevue/card';
+
+import App from './App.vue'
+import router from './router'
+
+ const apiKey = import.meta.env.VITE_API_KEY_FIREBASE
+const firebaseConfig = {
+    apiKey: apiKey,
+    authDomain: "crm-system-vue3-87dee.firebaseapp.com",
+    projectId: "crm-system-vue3-87dee",
+    storageBucket: "crm-system-vue3-87dee.firebasestorage.app",
+    messagingSenderId: "703563282961",
+    appId: "1:703563282961:web:f47185cc212612dbe50fb0"
+  }
+  initializeApp(firebaseConfig)
+
+const app = createApp(App)
+
+const MyPreset = definePreset(Aura, {
+  semantic: {
+      primary: {
+          50: '{indigo.50}',
+          100: '{indigo.100}',
+          200: '{indigo.200}',
+          300: '{indigo.300}',
+          400: '{indigo.400}',
+          500: '{indigo.500}',
+          600: '{indigo.600}',
+          700: '{indigo.700}',
+          800: '{indigo.800}',
+          900: '{indigo.900}',
+          950: '{indigo.950}'
+      }
+  }
+});
+
+app.use(PrimeVue, {
+  theme: {
+      preset: MyPreset,
+      options: {
+          prefix: 'p',
+          darkModeSelector: 'none',
+          cssLayer:  {
+            name: "primevue",
+            order: "theme, base, primevue",
+        },
+      }
+  }
+});
+
+app.use(createPinia())
+app.use(router)
+
+app.component('app-menubar', Menubar)
+app.component('app-button', Button)
+app.component('app-inputtext', InputText)
+app.component('app-message', Message)
+app.component('app-floatlabel', FloatLabel)
+app.component('app-autocomplete', AutoComplete)
+app.component('app-card', Card)
+
+app.mount('#app')
