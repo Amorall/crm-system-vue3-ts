@@ -3,7 +3,6 @@ import { ref, computed } from 'vue'
 import type { ComputedRef } from 'vue'
 import router from '../router'
 import { useRoute } from 'vue-router'
-import { getAuth, signOut } from 'firebase/auth'
 import { useAuthStore } from '@/stores/auth'
 
 interface IMenuItem {
@@ -15,49 +14,48 @@ interface IMenuItem {
 }
 const authStore = useAuthStore()
 const route = useRoute()
-const token = computed(() => authStore.userInfo.token)
 
 const items = ref<IMenuItem[]>([
   {
     label: 'Авторизация',
     icon: 'pi pi-sign-in',
     path: '/login',
-    show: computed((): boolean => !token.value),
+    show: computed((): boolean => !authStore.userInfo.userId),
   },
   {
     label: 'Регистрация',
     icon: 'pi pi-user-plus',
     path: '/register',
-    show: computed((): boolean => !token.value),
+    show: computed((): boolean => !authStore.userInfo.userId),
   },
   {
     label: 'Профиль',
     icon: 'pi pi-user',
     path: '/profile',
-    show: computed((): boolean => !!token.value),
+    show: computed((): boolean => !!authStore.userInfo.userId),
   },
   {
     label: 'Статистика',
     icon: 'pi pi-chart-bar',
     path: '/statistics',
-    show: computed((): boolean => !!token.value),
+    show: computed((): boolean => !!authStore.userInfo.userId),
   },
   {
     label: 'Финансы',
     icon: 'pi pi-wallet',
-    show: computed((): boolean => !!token.value),
+    show: computed((): boolean => !!authStore.userInfo.userId),
     items: [
       {
         label: 'Доходы',
         icon: 'pi pi-arrow-down-right',
         path: '/finance/incomes',
-        show: computed((): boolean => !!token.value),
+        show: computed((): boolean => !!authStore.userInfo.userId),
       },
       {
         label: 'Расходы',
         icon: 'pi pi-arrow-up-right',
         path: '/finance/expenses',
-        show: computed((): boolean => !!token.value),
+        show: computed((): boolean => !!authStore.userInfo.userId),
       }
     ]
   },
@@ -65,26 +63,15 @@ const items = ref<IMenuItem[]>([
     label: 'Каталог',
     icon: 'pi pi-book',
     path: '/catalog',
-    show: computed((): boolean => !!token.value),
+    show: computed((): boolean => !!authStore.userInfo.userId),
   },
 ])
 
-const checkUser = () => {
-    const userToken = localStorage.getItem('userToken');
-    const tokens = userToken ? JSON.parse(userToken) : null;
-    if (tokens) {
-        authStore.userInfo.token = tokens.token
-        authStore.userInfo.refreshToken = tokens.refreshToken
-        authStore.userInfo.expiresIn = tokens.expiresIn
-    }
-}
 const logout = () => {
     authStore.logout()
-    localStorage.removeItem('userToken')
     router.push('/login')
 }
 
-checkUser()
 </script>
 
 <template>
@@ -122,7 +109,7 @@ checkUser()
       </template>
 
       <template #end>
-        <div v-if="token" class="flex items-center mr-4">
+        <div v-if="authStore.userInfo.userId" class="flex items-center mr-4">
           <app-button @click="logout"
             class="flex items-center no-underline px-3 py-2 rounded-lg transition-colors duration-200 text-indigo-100 hover:bg-indigo-600 hover:text-white whitespace-nowrap">
             <span class="pi pi-sign-out mr-2"></span>

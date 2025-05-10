@@ -1,104 +1,128 @@
 import { ref } from 'vue'
-import { defineStore } from 'pinia';
-import axiosApiInstance from '../utils/axios-auth';
-
-const apiKey = import.meta.env.VITE_API_KEY_FIREBASE as string;
+import { defineStore } from 'pinia'
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+} from 'firebase/auth'
+import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore'
 
 interface UserInfo {
-  token: string;
-  email: string;
-  userId: string;
-  refreshToken: string;
-  expiresIn: string;
+  email: string | null
+  userId: string | null
+  firstName?: string | null
+  lastName?: string | null
+  middleName?: string | null
+  jobPosition?: string | null
+  gender?: string | null
+  permission?: number | null
 }
 
 interface AuthPayload {
-  email: string;
-  password: string;
+  email: string
+  password: string
+  firstName: string
+  lastName: string
+  middleName: string
+  jobPosition: string
+  gender: string
+}
+
+const POSITION_PERMISSIONS: Record<string, number> = {
+  Менеджер: 1,
+  Администратор: 2,
 }
 
 export const useAuthStore = defineStore('auth', () => {
-  const userInfo = ref<UserInfo>({
-    token: '',
-    email: '',
-    userId: '',
-    refreshToken: '',
-    expiresIn: '',
-  });
-
-  const error = ref<string>('');
-  const loader = ref<boolean>(false);
+  const userInfo = ref<UserInfo>({ email: null, userId: null })
+  const error = ref<string>('')
+  const loader = ref<boolean>(false)
 
   const auth = async (payload: AuthPayload, type: 'signup' | 'signin') => {
-    const stringUrl = type === 'signup' ? 'signUp' : 'signInWithPassword';
-    error.value = '';
-    loader.value = true;
+    error.value = ''
+    loader.value = true
 
     try {
-      const response = await axiosApiInstance.post<{
-        idToken: string;
-        email: string;
-        localId: string;
-        refreshToken: string;
-        expiresIn: string;
-      }>(
-        `https://identitytoolkit.googleapis.com/v1/accounts:${stringUrl}?key=${apiKey}`,
-        {
-          ...payload,
-          returnSecureToken: true,
-        },
-      );
+      const authInstance = getAuth()
+      const userCredential =
+        type === 'signup'
+          ? await createUserWithEmailAndPassword(authInstance, payload.email, payload.password)
+          : await signInWithEmailAndPassword(authInstance, payload.email, payload.password)
 
-      userInfo.value = {
-        token: response.data.idToken,
-        email: response.data.email,
-        userId: response.data.localId,
-        refreshToken: response.data.refreshToken,
-        expiresIn: response.data.expiresIn,
-      };
+      const user = userCredential.user
 
-      localStorage.setItem(
-        'userToken',
-        JSON.stringify({
-          token: userInfo.value.token,
-          refreshToken: userInfo.value.refreshToken,
-          expiresIn: userInfo.value.expiresIn,
-        }),
-      );
+      // Если это регистрация, сохраняем доп. данные в Firestore
+      if (type === 'signup' && payload.firstName) {
+        const db = getFirestore()
+        const permission = POSITION_PERMISSIONS[payload.jobPosition] ?? 1
+        await setDoc(doc(db, 'users', user.uid), {
+          firstName: payload.firstName,
+          lastName: payload.lastName,
+          middleName: payload.middleName,
+          jobPosition: payload.jobPosition,
+          gender: payload.gender,
+          incomeValue: '0',
+          permission: permission,
+        })
+
+        userInfo.value = {
+          email: user.email,
+          userId: user.uid,
+          jobPosition: payload.jobPosition,
+          firstName: payload.firstName,
+          lastName: payload.lastName,
+          middleName: payload.middleName,
+        }
+      } else {
+        // Для входа загружаем дополнительные данные
+        const db = getFirestore()
+        const userDoc = await getDoc(doc(db, 'users', user.uid))
+        if (userDoc.exists()) {
+          userInfo.value = {
+            email: user.email,
+            userId: user.uid,
+            ...userDoc.data(),
+          }
+        }
+      }
     } catch (err: any) {
-      const errorMessage: string =
-        err.response?.data?.error?.message || err.message || 'Произошла неизвестная ошибка';
+      const errorMessage: string = err.code || 'unknown'
 
       switch (errorMessage) {
-        case 'EMAIL_EXISTS':
-          error.value = 'Этот email уже зарегистрирован';
-          break;
-        case 'INVALID_LOGIN_CREDENTIALS':
-          error.value = 'Неверный email или пароль';
-          break;
-        case 'USER_DISABLED':
-          error.value = 'Пользователь заблокирован';
-          break;
+        case 'auth/email-already-in-use':
+          error.value = 'Этот email уже зарегистрирован'
+          break
+        case 'auth/invalid-credentials':
+          error.value = 'Неверный email или пароль'
+          break
+        case 'auth/user-disabled':
+          error.value = 'Пользователь заблокирован'
+          break
         default:
-          error.value = 'Произошла ошибка. Попробуйте позже';
-          break;
+          error.value = err
+          break
       }
-      throw new Error(error.value);
+      throw new Error(error.value)
     } finally {
-      loader.value = false;
+      loader.value = false
     }
-  };
+  }
 
-  const logout = () => {
-    userInfo.value = {
-      token: '',
-      email: '',
-      userId: '',
-      refreshToken: '',
-      expiresIn: '',
-    };
-    localStorage.removeItem('userToken');
-  };
+  const logout = async (): Promise<void> => {
+    loader.value = true
+    error.value = ''
+    try {
+      const auth = getAuth()
+      await signOut(auth)
 
-  return { auth, userInfo, error, loader, logout };
-});
+      userInfo.value = { email: null, userId: null }
+    } catch (err: any) {
+      error.value = err.message || 'Произошла ошибка при выходе'
+    } finally {
+      loader.value = false
+    }
+  }
+
+  return { auth, userInfo, error, loader, logout }
+})

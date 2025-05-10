@@ -1,5 +1,4 @@
 import 'primeicons/primeicons.css'
-import '@/utils/axios-auth';
 import './assets/main.css'
 
 import { createApp } from 'vue'
@@ -8,6 +7,8 @@ import { initializeApp } from "firebase/app"
 import PrimeVue from 'primevue/config'
 import { definePreset } from '@primeuix/themes';
 import Aura from '@primeuix/themes/nora'
+import ToastService from 'primevue/toastservice'
+
 import Menubar from 'primevue/menubar';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
@@ -15,6 +16,12 @@ import Message from 'primevue/message';
 import FloatLabel from 'primevue/floatlabel';
 import AutoComplete from 'primevue/autocomplete';
 import Card from 'primevue/card';
+import InputMask from 'primevue/inputmask';
+import Dialog from 'primevue/dialog';
+import DataTable from 'primevue/datatable';
+import Column from 'primevue/column';
+import RadioButton from 'primevue/radiobutton';
+import Select from 'primevue/select';
 
 import App from './App.vue'
 import router from './router'
@@ -51,6 +58,7 @@ const MyPreset = definePreset(Aura, {
 });
 
 app.use(PrimeVue, {
+  ripple: true,
   theme: {
       preset: MyPreset,
       options: {
@@ -66,6 +74,7 @@ app.use(PrimeVue, {
 
 app.use(createPinia())
 app.use(router)
+app.use(ToastService)
 
 app.component('app-menubar', Menubar)
 app.component('app-button', Button)
@@ -74,5 +83,11 @@ app.component('app-message', Message)
 app.component('app-floatlabel', FloatLabel)
 app.component('app-autocomplete', AutoComplete)
 app.component('app-card', Card)
+app.component('app-inputmask', InputMask)
+app.component('app-dialog', Dialog)
+app.component('app-datatable', DataTable)
+app.component('app-column', Column)
+app.component('app-radiobutton', RadioButton)
+app.component('app-select', Select)
 
 app.mount('#app')

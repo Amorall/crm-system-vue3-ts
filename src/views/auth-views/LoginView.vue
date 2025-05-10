@@ -102,7 +102,7 @@ const signin = async () => {
 
 <template>
   <div class="w-screen min-h-[calc(100vh-56px)] overflow-auto bg-gray-100 flex flex-col items-center justify-center">
-    <app-message class="mb-4 w-full max-w-md" v-if="authStore.error" severity="error" closable
+    <app-message class="m-0 w-full max-w-md" v-if="authStore.error" severity="error" closable
       @close="authStore.error = ''">{{ authStore.error }}</app-message>
 
     <div class="w-full max-w-md">
@@ -161,7 +161,6 @@ const signin = async () => {
 <style scoped>
 .p-message {
   position: relative;
-  margin-bottom: 1rem;
   z-index: 10;
 }
 </style>

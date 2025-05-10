@@ -1,11 +1,24 @@
 <script setup lang="ts">
-import AppHeader from "@/components/header.vue"
+import { onMounted, ref} from "vue"
 import { getAuth, onAuthStateChanged } from 'firebase/auth'
 import { useAuthStore } from "./stores/auth"
-import { onMounted } from "vue"
+import AppHeader from "@/components/header.vue"
+import Toast from 'primevue/toast'
 
 const authStore = useAuthStore() 
 
+ onMounted(() => {
+  onAuthStateChanged(getAuth(), (user) => {
+    if (user) {
+      console.log("User is signed in:", user);
+
+      authStore.userInfo.userId = user.uid
+      authStore.userInfo.email = user.email
+    } else {
+      authStore.userInfo.userId = ''
+    }
+  })
+ })
 
 </script>
 
@@ -13,6 +26,7 @@ const authStore = useAuthStore()
     <div class="container min-h-screen w-screen bg-gray-100">
     <app-header></app-header>
     <div class="content">
+      <Toast />
       <RouterView />
     </div>
   </div>
