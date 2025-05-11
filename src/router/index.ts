@@ -3,19 +3,10 @@ import type { RouteRecordRaw, RouteLocationNormalized, NavigationGuardNext } fro
 import { getAuth, onAuthStateChanged } from 'firebase/auth'
 import { useAuthStore } from '@/stores/auth'
 
-import HomeView from '../views/HomeView.vue'
-import RegistrationView from '../views/auth-views/RegistrationView.vue'
-import LoginView from '@/views/auth-views/LoginView.vue'
-import StatisticsView from '@/views/system-views/StatisticsView.vue'
-import ProfileView from '@/views/system-views/ProfileView.vue'
-import FinanceIncomesView from '@/views/system-views/FinanceIncomeView.vue'
-import FinanceExpensesView from '@/views/system-views/FinanceExpensesView.vue'
-import CatalogView from '@/views/system-views/CatalogView.vue'
-
 const checkAuth = (
   to: RouteLocationNormalized,
   from: RouteLocationNormalized,
-  next: NavigationGuardNext
+  next: NavigationGuardNext,
 ) => {
   let isAuth = false
 
@@ -33,7 +24,7 @@ const checkAuth = (
 const checkNotAuth = (
   to: RouteLocationNormalized,
   from: RouteLocationNormalized,
-  next: NavigationGuardNext
+  next: NavigationGuardNext,
 ) => {
   let isAuth = false
 
@@ -52,62 +43,62 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'Home',
-    component: HomeView,
-    beforeEnter: checkNotAuth
+    component: () => import('@/views/HomeView.vue'),
+    beforeEnter: checkNotAuth,
   },
   {
     path: '/register',
     name: 'Register',
-    component: RegistrationView,
-    beforeEnter: checkNotAuth 
+    component: () => import('@/views/auth-views/RegistrationView.vue'),
+    beforeEnter: checkNotAuth,
   },
   {
     path: '/login',
     name: 'Login',
-    component: LoginView,
-    beforeEnter: checkNotAuth 
+    component: () => import('@/views/auth-views/LoginView.vue'),
+    beforeEnter: checkNotAuth,
   },
   {
     path: '/statistics',
     name: 'Statistics',
-    component: StatisticsView,
-    beforeEnter: checkAuth
+    component: () => import('@/views/system-views/StatisticsView.vue'),
+    beforeEnter: checkAuth,
   },
   {
     path: '/profile',
     name: 'Profile',
-    component: ProfileView,
-    beforeEnter: checkAuth
+    component: () => import('@/views/system-views/ProfileView.vue'),
+    beforeEnter: checkAuth,
   },
   {
     path: '/finance',
     name: 'Finance',
     redirect: '/finance/incomes',
-    beforeEnter: checkAuth
+    beforeEnter: checkAuth,
   },
   {
     path: '/finance/incomes',
     name: 'Incomes',
-    component: FinanceIncomesView,
-    beforeEnter: checkAuth
+    component: () => import('@/views/system-views/FinanceIncomeView.vue'),
+    beforeEnter: checkAuth,
   },
   {
     path: '/finance/expenses',
     name: 'Expenses',
-    component: FinanceExpensesView,
-    beforeEnter: checkAuth
+    component: () => import('@/views/system-views/FinanceExpensesView.vue'),
+    beforeEnter: checkAuth,
   },
   {
     path: '/catalog',
     name: 'Catalog',
-    component: CatalogView,
-    beforeEnter: checkAuth
+    component: () => import('@/views/system-views/CatalogView.vue'),
+    beforeEnter: checkAuth,
   },
 ]
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  routes: routes
+  routes: routes,
 })
 
 router.afterEach(() => {

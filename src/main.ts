@@ -8,6 +8,7 @@ import PrimeVue from 'primevue/config'
 import { definePreset } from '@primeuix/themes';
 import Aura from '@primeuix/themes/nora'
 import ToastService from 'primevue/toastservice'
+import ConfirmationService from 'primevue/confirmationservice';
 
 import Menubar from 'primevue/menubar';
 import Button from 'primevue/button';
@@ -22,6 +23,8 @@ import DataTable from 'primevue/datatable';
 import Column from 'primevue/column';
 import RadioButton from 'primevue/radiobutton';
 import Select from 'primevue/select';
+import ConfirmDialog from 'primevue/confirmdialog';
+import Tag from 'primevue/tag';
 
 import App from './App.vue'
 import router from './router'
@@ -58,7 +61,6 @@ const MyPreset = definePreset(Aura, {
 });
 
 app.use(PrimeVue, {
-  ripple: true,
   theme: {
       preset: MyPreset,
       options: {
@@ -75,6 +77,7 @@ app.use(PrimeVue, {
 app.use(createPinia())
 app.use(router)
 app.use(ToastService)
+app.use(ConfirmationService);
 
 app.component('app-menubar', Menubar)
 app.component('app-button', Button)
@@ -89,5 +92,7 @@ app.component('app-datatable', DataTable)
 app.component('app-column', Column)
 app.component('app-radiobutton', RadioButton)
 app.component('app-select', Select)
+app.component('app-confirmdialog', ConfirmDialog)
+app.component('app-tag', Tag)
 
 app.mount('#app')

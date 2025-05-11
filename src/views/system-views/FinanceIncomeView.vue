@@ -3,11 +3,15 @@ import { ref, computed, onMounted } from 'vue'
 import { getAuth } from 'firebase/auth'
 import { useAuthStore } from '@/stores/auth'
 import { useSalesStore } from '@/stores/sales'
-import { useToast } from 'primevue/usetoast';
+import { useToast } from 'primevue/usetoast'
+import { useConfirm } from 'primevue/useconfirm'
+import { debounce } from 'lodash-es'
+import Loader from '../../components/loader.vue'
 
 const authStore = useAuthStore()
 const salesStore = useSalesStore()
 const toast = useToast()
+const confirm = useConfirm()
 
 // Реактивные данные формы
 const productName = ref<string>('')
@@ -17,26 +21,95 @@ const clientEmail = ref<string>('')
 const clientWhApp = ref<string>('')
 const clientTg = ref<string>('')
 const price = ref<string>('')
+const editingSaleId = ref<string>('')
+const searchQuery = ref<string>('')
+const status = ref<string>('open')
 const visible = ref<boolean>(false)
+const isEditing = ref(false)
 
-// Пагинация
-const currentPage = ref<number>(1)
-const rowsPerPage = ref<number>(10)
+const onDialogHide = () => {
+  resetForm()
+}
+
+const debouncedSearch = debounce((value: string) => {
+  searchQuery.value = value
+}, 300)
 
 const disableSaveButton = computed(() => {
   return !(productName.value && clientName.value && price.value && (clientPhone.value || clientEmail.value || clientTg.value || clientWhApp.value))
 })
 
+const confirmRemoveSale = async (id: string): Promise<void> => {
+  confirm.require({
+    message: 'Вы точно хотите удалить?',
+    header: 'Удаление сделки',
+    icon: 'pi pi-info-circle',
+    rejectLabel: 'Отмена',
+    acceptLabel: 'Удалить',
+    rejectClass: 'p-button-secondary p-button-outlined',
+    acceptClass: 'p-button-danger',
+    accept: async () => {
+      try {
+        await salesStore.deleteSale(id);
+        toast.add({
+          severity: 'success',
+          summary: 'Успешно',
+          detail: 'Сделка удалена',
+          life: 2000
+        });
+      } catch (error) {
+        toast.add({
+          severity: 'error',
+          summary: 'Ошибка',
+          detail: 'Не удалось удалить сделку',
+          life: 2000
+        });
+        console.error('Ошибка удаления:', error);
+      }
+    }
+  })
+}
+
+const lastEditedInfo = computed(() => {
+  const sale = salesStore.sales.find((s: { id: string }) => s.id === editingSaleId.value)
+  if (!sale) return ''
+  
+  const date = sale.lastEditedDate?.toDate 
+    ? sale.lastEditedDate.toDate().toLocaleString() 
+    : new Date(sale.lastEditedDate?.seconds * 1000).toLocaleString()
+  
+  return `${sale.lastEditedByName || 'Неизвестный'}, ${date}`
+})
+
+const filteredSales = computed(() => {
+  if (!searchQuery.value) return salesStore.sales
+
+  const query = searchQuery.value.toLowerCase()
+  return salesStore.sales.filter((sale: any) => {
+    return (
+      (sale.clientName?.toLowerCase().includes(query)) ||
+      (sale.productName?.toLowerCase().includes(query)) ||
+      (sale.clientPhone?.toLowerCase().includes(query)) ||
+      (sale.clientEmail?.toLowerCase().includes(query)) ||
+      (sale.clientTg?.toLowerCase().includes(query)) ||
+      (sale.clientWhApp?.toLowerCase().includes(query)) ||
+      (sale.price?.toString().includes(query)) ||
+      (sale.createdByName?.toLowerCase().includes(query)) ||
+      ((sale.status === 'open' ? 'открыта' : 'закрыта').includes(query))
+    )
+  })
+})
+
 const copyToClipboard = (text: string, type: string) => {
   navigator.clipboard.writeText(text).then(() => {
     let typeName = '';
-    switch(type) {
+    switch (type) {
       case 'email': typeName = 'Email'; break;
       case 'phone': typeName = 'Телефон'; break;
       case 'whatsapp': typeName = 'WhatsApp'; break;
       case 'telegram': typeName = 'Telegram'; break;
     }
-    
+
     toast.add({
       severity: 'success',
       summary: 'Скопировано',
@@ -54,15 +127,29 @@ const copyToClipboard = (text: string, type: string) => {
   });
 };
 
-const addNewSale = async (): Promise<void> => {
+const openEditDialog = (sale: IIncomes) => {
+  isEditing.value = true
+  editingSaleId.value = sale.id
+  productName.value = sale.productName
+  clientName.value = sale.clientName
+  clientPhone.value = sale.clientPhone
+  clientEmail.value = sale.clientEmail
+  clientWhApp.value = sale.clientWhApp
+  clientTg.value = sale.clientTg
+  price.value = sale.price
+  status.value = sale.status
+  visible.value = true
+}
+
+const saveSale = async () => {
   try {
     const auth = getAuth()
     const user = auth.currentUser
-
     if (!user) throw new Error('Пользователь не авторизован')
 
-    // Получаем имя пользователя
-    const userName = `${authStore.userInfo.firstName || ''} ${authStore.userInfo.lastName || ''}`.trim();
+    const userName = `${authStore.userInfo.firstName || ''} ${authStore.userInfo.lastName || ''}`.trim()
+    const now = new Date()
+
     const saleData = {
       productName: productName.value,
       clientName: clientName.value,
@@ -71,68 +158,78 @@ const addNewSale = async (): Promise<void> => {
       clientWhApp: clientWhApp.value,
       clientTg: clientTg.value,
       price: price.value,
-      createdByName: userName || 'Неизвестный',
-      lastEditedByName: userName || 'Неизвестный'
+      status: isEditing.value ? status.value : 'open',
+      lastEditedByName: userName || 'Неизвестный',
+      lastEditedDate: now
     }
 
-    await salesStore.addSale(saleData)
+    if (isEditing.value && editingSaleId.value) {
+      await salesStore.updateSale(editingSaleId.value, saleData)
+      toast.add({ severity: 'success', summary: 'Успешно', detail: 'Сделка обновлена', life: 2000 })
+    } else {
+        const newSale = await salesStore.addSale({
+        ...saleData,
+        createdBy: user.uid,
+        createdByName: userName || 'Неизвестный',
+        createdDate: now
+      })
+      toast.add({ severity: 'success', summary: 'Успешно', detail: 'Сделка добавлена', life: 2000 })
+    }
 
-    // Очистка формы
-    productName.value = ''
-    clientName.value = ''
-    clientPhone.value = ''
-    clientEmail.value = ''
-    clientTg.value = ''
-    clientWhApp.value = ''
-    price.value = ''
     visible.value = false
+    resetForm()
 
-    if (currentPage.value === 1) {
-      await salesStore.fetchSales(rowsPerPage.value);
-    }
-
+    await salesStore.fetchAllSales()
   } catch (error) {
-    console.error("Error in addNewSale:", error)
+    toast.add({ severity: 'error', summary: 'Ошибка', detail: 'Ошибка операции', life: 2000 })
+    console.error('Ошибка:', error)
   }
 }
 
-const onPageChange = async (event: any) => {
-  if (!salesStore.hasMore && event.page > 0) return
-
-  await salesStore.fetchSales(
-    rowsPerPage.value,
-    event.page > 0 ? salesStore.lastVisibleDoc : null
-  )
+const resetForm = () => {
+  productName.value = ''
+  clientName.value = ''
+  clientPhone.value = ''
+  clientEmail.value = ''
+  clientWhApp.value = ''
+  clientTg.value = ''
+  price.value = ''
+  isEditing.value = false
+  editingSaleId.value = ''
+  status.value = 'open'
 }
 
 onMounted(async () => {
-  await salesStore.fetchSales(rowsPerPage.value)
+  await salesStore.fetchAllSales()
 })
 
 </script>
 
 <template>
+  <app-confirmdialog />
   <div class="content p-4">
     <app-card>
       <template #content>
-        <!-- Кнопка и поиск -->
+
         <div class="flex justify-between items-center mb-6">
           <app-button @click="visible = true" class="px-4 py-2 text-white rounded">
             <i class="pi pi-plus" />
-            <span class="hidden md:block">Добавить продажу</span>
+            <span class="hidden md:block">Добавить сделку</span>
           </app-button>
 
           <div class="w-64">
-            <app-inputtext placeholder="Поиск по продажам..." class="w-full p-2 border rounded" />
+            <app-inputtext @input="debouncedSearch($event.target.value)" placeholder="Поиск по сделкам..."
+              class="w-full p-2 border rounded" />
           </div>
         </div>
 
 
         <!-- Диалоговое окно -->
-        <app-dialog v-model:visible="visible" modal header="Форма продаж" class="max-w-md mx-auto" :pt="{
-          headerActions: { class: 'ml-auto' },
-          closeButton: { class: 'ml-2' }
-        }">
+        <app-dialog v-model:visible="visible" modal :header="isEditing ? 'Редактирование сделки' : 'Новая сделка'"
+          class="max-w-md mx-auto" @hide="onDialogHide" :pt="{
+            headerActions: { class: 'ml-auto' },
+            closeButton: { class: 'ml-2' }
+          }">
           <span class="block mb-2">В поле "контакты" достаточно указать хотя бы один.</span>
           <div class="flex flex-col gap-4 p-4">
             <span>Общая информация:</span>
@@ -146,27 +243,51 @@ onMounted(async () => {
               class="w-full p-2 border rounded" />
             <app-inputtext v-model="clientEmail" placeholder="Email клиента" class="w-full p-2 border rounded" />
             <app-inputtext v-model="clientTg" placeholder="Telegram клиента" class="w-full p-2 border rounded" />
+            <div v-if="isEditing">
+              <span>Статус сделки:</span>
+              <div class="flex gap-4">
+                <div class="flex items-center">
+                  <app-radiobutton v-model="status" inputId="status-open" value="open" />
+                  <label for="status-open" class="ml-2">Открыта</label>
+                </div>
+                <div class="flex items-center">
+                  <app-radiobutton v-model="status" inputId="status-closed" value="closed" />
+                  <label for="status-closed" class="ml-2">Закрыта</label>
+                </div>
+              </div>
+              <div class="text-sm text-gray-500 mt-4">
+                <div>Последнее изменение:</div>
+                <div>{{ lastEditedInfo }}</div>
+              </div>
+            </div>
 
             <div class="flex justify-end gap-2 mt-4">
               <app-button label="Отмена" severity="secondary" @click="visible = false"
                 class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded" />
-              <app-button label="Добавить продажу" @click="addNewSale" :disabled="disableSaveButton"
-                :loading="salesStore.adding" class="px-4 py-2 text-white rounded" />
+              <app-button :label="isEditing ? 'Сохранить изменения' : 'Добавить сделку'" @click="saveSale"
+                :disabled="disableSaveButton" class="px-4 py-2 text-white rounded" />
             </div>
           </div>
         </app-dialog>
 
-        <!-- Таблица продаж -->
-        <div class="mt-6">
-          <h2 class="text-xl font-semibold mb-4">Список продаж</h2>
-          <app-datatable :value="salesStore.sales" class="w-full" paginator :rows="rowsPerPage"
-            :totalRecords="salesStore.totalRecords" :rowsPerPageOptions="[5, 10, 20, 50]" @page="onPageChange"
+        <template v-if="salesStore.loading">
+          <Loader class="flex justify-between items-center" />
+        </template>
+
+        <app-message v-else-if="!salesStore.sales.length" severity="info" icon="pi pi-question-circle"
+          variant="outlined">Список
+          сделок пуст. Пожалуйста добавьте сделку
+          по
+          кнопке "Добавить"</app-message>
+
+        <!-- Таблица -->
+        <div v-else class="mt-6">
+          <h2 class="text-xl font-semibold mb-4">Список сделок</h2>
+          <app-datatable :value="filteredSales" paginator :rows="10" :rowsPerPageOptions="[5, 10, 20, 50]"
             :loading="salesStore.loading" :pt="{
-              table: { class: 'min-w-full' },
-              headerRow: { class: 'bg-gray-200' },
               bodyRow: { class: 'hover:bg-gray-50' }
             }">
-            <app-column field="clientName" header="Клиент" sortable class="p-3"></app-column>
+            <app-column field="clientName" header="Клиент" class="p-3"></app-column>
             <app-column header="Контакты" class="p-3">
               <template #body="slotProps">
                 <div class="gap-2 w-full">
@@ -201,17 +322,32 @@ onMounted(async () => {
                 </div>
               </template>
             </app-column>
-            <app-column field="productName" header="Продукт" sortable class="p-3"></app-column>
-            <app-column field="price" header="Сумма" sortable class="p-3">
+            <app-column field="productName" header="Продукт" class="p-3"></app-column>
+            <app-column field="price" header="Сумма" class="p-3">
               <template #body="{ data }">
                 {{ data.price }} ₽
               </template>
             </app-column>
-            <app-column field="createdByName" header="Сотрудник" sortable class="p-3"></app-column>
-            <app-column field="createdDate" header="Дата" sortable class="p-3">
+            <app-column field="createdByName" header="Сотрудник" class="p-3"></app-column>
+            <app-column field="createdDate" header="Дата" class="p-3">
               <template #body="{ data }">
                 {{ data.createdDate?.toDate ? data.createdDate.toDate().toLocaleDateString() :
                   new Date(data.createdDate?.seconds * 1000).toLocaleDateString() }}
+              </template>
+            </app-column>
+            <app-column field="status" header="Статус" class="p-3">
+              <template #body="{ data }">
+                <app-tag :severity="data.status === 'open' ? 'success' : 'danger'"
+                  :value="data.status === 'open' ? 'Открыта' : 'Закрыта'">
+                </app-tag>
+              </template>
+            </app-column>
+            <app-column>
+              <template #body="slotProps">
+                <div class="flex gap-2">
+                  <app-button icon="pi pi-pencil" severity="info" @click="openEditDialog(slotProps.data)" />
+                  <app-button icon="pi pi-trash" severity="danger" @click="confirmRemoveSale(slotProps.data.id)" />
+                </div>
               </template>
             </app-column>
           </app-datatable>

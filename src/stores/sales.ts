@@ -1,4 +1,3 @@
-
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import {
@@ -7,55 +6,29 @@ import {
   query,
   orderBy,
   getDocs,
-  getCountFromServer,
-  limit,
-  startAfter,
   doc,
   setDoc,
   getDoc,
+  deleteDoc,
 } from 'firebase/firestore'
 import { getAuth } from 'firebase/auth'
 import { v4 as uuidv4 } from 'uuid'
 import type { IIncomes } from '@/utils/interfaces'
-import type { DocumentSnapshot } from 'firebase/firestore'
 
 export const useSalesStore = defineStore('sales', () => {
   const sales = ref<IIncomes[]>([])
   const loading = ref<boolean>(false)
-  const adding = ref<boolean>(false)
   const error = ref<string>('')
-  const lastVisibleDoc = ref<DocumentSnapshot | null>(null)
-  const totalRecords = ref<number>(0)
-  const hasMore = ref<boolean>(true)
 
- const fetchSales = async (itemsPerPage: number, startAfterDoc: DocumentSnapshot | null = null) => {
+  const fetchAllSales = async () => {
     loading.value = true
     error.value = ''
     try {
       const db = getFirestore()
-      let q = query(
-        collection(db, 'incomes'),
-        orderBy('createdDate', 'desc'),
-        limit(itemsPerPage)
-      )
-
-      if (startAfterDoc) {
-        q = query(q, startAfter(startAfterDoc))
-      }
+      const q = query(collection(db, 'incomes'), orderBy('createdDate', 'desc'))
 
       const snapshot = await getDocs(q)
-      const countSnapshot = await getCountFromServer(collection(db, 'incomes'))
-
-      // Обновляем данные
-      sales.value = startAfterDoc 
-        ? [...sales.value, ...snapshot.docs.map(doc => doc.data())]
-        : snapshot.docs.map(doc => doc.data())
-
-      lastVisibleDoc.value = snapshot.docs[snapshot.docs.length - 1] || null
-      totalRecords.value = countSnapshot.data().count
-      hasMore.value = snapshot.docs.length === itemsPerPage
-
-      console.log('Fetched:', snapshot.docs.length, 'Has more:', hasMore.value)
+      sales.value = snapshot.docs.map((doc) => doc.data() as IIncomes)
     } catch (err) {
       error.value = 'Ошибка загрузки'
       console.error(err)
@@ -65,7 +38,7 @@ export const useSalesStore = defineStore('sales', () => {
   }
 
   const addSale = async (saleData: Omit<IIncomes, 'id' | 'createdDate'>) => {
-    adding.value = true
+    loading.value = true
     try {
       const auth = getAuth()
       const user = auth.currentUser
@@ -89,6 +62,8 @@ export const useSalesStore = defineStore('sales', () => {
         createdByName: userName,
         lastEditedBy: user.uid,
         lastEditedByName: userName,
+        status: saleData.status || 'open',
+        lastEditedDate: new Date(),
       }
 
       await setDoc(doc(db, 'incomes', saleId), newSale)
@@ -97,19 +72,68 @@ export const useSalesStore = defineStore('sales', () => {
       console.error(err)
       throw err
     } finally {
-      adding.value = false
+      loading.value = false
+    }
+  }
+
+  const updateSale = async (id: string, saleData: Partial<IIncomes>) => {
+    loading.value = true
+    try {
+      const auth = getAuth()
+      const user = auth.currentUser
+      if (!user) throw new Error('Пользователь не авторизован')
+
+      const db = getFirestore()
+
+      // Получаем текущие данные продажи
+      const saleRef = doc(db, 'incomes', id)
+      const saleDoc = await getDoc(saleRef)
+      if (!saleDoc.exists()) throw new Error('Продажа не найдена')
+
+      const userDoc = await getDoc(doc(db, 'users', user.uid))
+      const userData = userDoc.data()
+      const userName = userData
+        ? `${userData.firstName || ''} ${userData.lastName || ''}`.trim()
+        : 'Неизвестный'
+      // Обновляем данные
+      const updatedSale = {
+        ...saleDoc.data(),
+        ...saleData,
+        lastEditedBy: user.uid,
+        lastEditedByName: userName,
+        lastEditedDate: new Date(),
+      }
+
+      await setDoc(saleRef, updatedSale, { merge: true })
+      await fetchAllSales() // Обновляем список
+      return updatedSale
+    } catch (err) {
+      console.error(err)
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const deleteSale = async (id: string) => {
+    try {
+      const db = getFirestore()
+      await deleteDoc(doc(db, 'incomes', id))
+      // Обновляем список продаж после удаления
+      await fetchAllSales()
+    } catch (err) {
+      console.error(err)
+      throw err
     }
   }
 
   return {
     sales,
     loading,
-    adding,
     error,
-    totalRecords,
-    lastVisibleDoc,
-    hasMore,
-    fetchSales,
+    fetchAllSales,
     addSale,
+    deleteSale,
+    updateSale,
   }
 })
