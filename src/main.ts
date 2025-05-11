@@ -25,6 +25,7 @@ import RadioButton from 'primevue/radiobutton';
 import Select from 'primevue/select';
 import ConfirmDialog from 'primevue/confirmdialog';
 import Tag from 'primevue/tag';
+import Chart from 'primevue/chart';
 
 import App from './App.vue'
 import router from './router'
@@ -94,5 +95,6 @@ app.component('app-radiobutton', RadioButton)
 app.component('app-select', Select)
 app.component('app-confirmdialog', ConfirmDialog)
 app.component('app-tag', Tag)
+app.component('app-chart', Chart)
 
 app.mount('#app')

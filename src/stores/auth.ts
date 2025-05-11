@@ -6,7 +6,8 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth'
-import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore'
+import { getFirestore, doc, setDoc, getDoc, increment, Timestamp } from 'firebase/firestore'
+import { getDownloadURL, getStorage, uploadBytes } from 'firebase/storage'
 
 interface UserInfo {
   email: string | null
@@ -17,21 +18,31 @@ interface UserInfo {
   jobPosition?: string | null
   gender?: string | null
   permission?: number | null
+  stats?: {
+    totalSales: number
+    openSales: number
+    closedSales: number
+  }
+  status?: 'working' | 'vacation' | 'sick_leave'
+  lastLogin?: Date | Timestamp | { seconds: number; nanoseconds?: number } | null;
+  loginCount?: number
+  photoURL?: string
 }
 
 interface AuthPayload {
   email: string
   password: string
-  firstName: string
-  lastName: string
-  middleName: string
-  jobPosition: string
-  gender: string
+  firstName?: string
+  lastName?: string
+  middleName?: string
+  jobPosition?: string
+  gender?: string
 }
 
 const POSITION_PERMISSIONS: Record<string, number> = {
   Менеджер: 1,
   Администратор: 2,
+  Директор: 3
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -55,7 +66,7 @@ export const useAuthStore = defineStore('auth', () => {
       // Если это регистрация, сохраняем доп. данные в Firestore
       if (type === 'signup' && payload.firstName) {
         const db = getFirestore()
-        const permission = POSITION_PERMISSIONS[payload.jobPosition] ?? 1
+        const permission = POSITION_PERMISSIONS[payload.jobPosition!] ?? 1
         await setDoc(doc(db, 'users', user.uid), {
           firstName: payload.firstName,
           lastName: payload.lastName,
@@ -124,5 +135,65 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { auth, userInfo, error, loader, logout }
+
+  const updateUserStatus = async (newStatus: 'working' | 'vacation' | 'sick_leave') => {
+    try {
+      const auth = getAuth()
+      const user = auth.currentUser
+      if (!user) throw new Error('Пользователь не авторизован')
+
+      const db = getFirestore()
+      await setDoc(
+        doc(db, 'users', user.uid),
+        {
+          status: newStatus,
+        },
+        { merge: true },
+      )
+
+      userInfo.value.status = newStatus
+    } catch (err) {
+      console.error('Ошибка обновления статуса:', err)
+      throw err
+    }
+  }
+
+  const trackLogin = async () => {
+    const auth = getAuth()
+    const user = auth.currentUser
+    if (!user) return
+
+    const db = getFirestore()
+    await setDoc(
+      doc(db, 'users', user.uid),
+      {
+        lastLogin: new Date(),
+        loginCount: increment(1),
+      },
+      { merge: true },
+    )
+  }
+
+  const loadUserProfile = async () => {
+  try {
+    const auth = getAuth()
+    const user = auth.currentUser
+    if (!user) return
+
+    const db = getFirestore()
+    const userDoc = await getDoc(doc(db, 'users', user.uid))
+    
+    if (userDoc.exists()) {
+      userInfo.value = {
+        ...userInfo.value,
+        ...userDoc.data()
+      }
+    }
+  } catch (error) {
+    console.error('Ошибка загрузки профиля:', error)
+    throw error
+  }
+}
+
+  return { userInfo, error, loader, logout, auth, updateUserStatus, trackLogin, loadUserProfile, }
 })

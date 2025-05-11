@@ -34,6 +34,7 @@ const emailDomains: string[] = [
 const jobPositions = ref([
   { name: 'Менеджер', code: 'manager' },
   { name: 'Администратор', code: 'admin' },
+  { name: 'Директор', code: 'director' }
 ]);
 
 const isEmailFilled = computed(() => email.value.length > 0);

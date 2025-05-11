@@ -127,7 +127,7 @@ const copyToClipboard = (text: string, type: string) => {
   });
 };
 
-const openEditDialog = (sale: IIncomes) => {
+const openEditDialog = (sale: any) => {
   isEditing.value = true
   editingSaleId.value = sale.id
   productName.value = sale.productName
@@ -171,7 +171,6 @@ const saveSale = async () => {
         ...saleData,
         createdBy: user.uid,
         createdByName: userName || 'Неизвестный',
-        createdDate: now
       })
       toast.add({ severity: 'success', summary: 'Успешно', detail: 'Сделка добавлена', life: 2000 })
     }

@@ -90,6 +90,7 @@ const signin = async () => {
       email: email.value,
       password: password.value
     }, 'signin');
+    await authStore.trackLogin()
 
     if (!authStore.error) {
       router.push('/statistics');

@@ -10,13 +10,14 @@ import {
   setDoc,
   getDoc,
   deleteDoc,
+  increment,
 } from 'firebase/firestore'
 import { getAuth } from 'firebase/auth'
 import { v4 as uuidv4 } from 'uuid'
-import type { IIncomes } from '@/utils/interfaces'
+import type { IIncome } from '@/utils/interfaces'
 
 export const useSalesStore = defineStore('sales', () => {
-  const sales = ref<IIncomes[]>([])
+  const sales = ref<IIncome[]>([])
   const loading = ref<boolean>(false)
   const error = ref<string>('')
 
@@ -28,7 +29,7 @@ export const useSalesStore = defineStore('sales', () => {
       const q = query(collection(db, 'incomes'), orderBy('createdDate', 'desc'))
 
       const snapshot = await getDocs(q)
-      sales.value = snapshot.docs.map((doc) => doc.data() as IIncomes)
+      sales.value = snapshot.docs.map((doc) => doc.data() as IIncome)
     } catch (err) {
       error.value = 'Ошибка загрузки'
       console.error(err)
@@ -37,7 +38,7 @@ export const useSalesStore = defineStore('sales', () => {
     }
   }
 
-  const addSale = async (saleData: Omit<IIncomes, 'id' | 'createdDate'>) => {
+  const addSale = async (saleData: Omit<IIncome, 'id' | 'createdDate'>) => {
     loading.value = true
     try {
       const auth = getAuth()
@@ -54,7 +55,7 @@ export const useSalesStore = defineStore('sales', () => {
         ? `${userData.firstName || ''} ${userData.lastName || ''}`.trim()
         : 'Неизвестный'
 
-      const newSale: IIncomes = {
+      const newSale: IIncome = {
         ...saleData,
         id: saleId,
         createdDate: new Date(),
@@ -65,8 +66,8 @@ export const useSalesStore = defineStore('sales', () => {
         status: saleData.status || 'open',
         lastEditedDate: new Date(),
       }
-
       await setDoc(doc(db, 'incomes', saleId), newSale)
+      await updateUserStats(user.uid, 'add', saleData.status)
       return newSale
     } catch (err) {
       console.error(err)
@@ -76,7 +77,7 @@ export const useSalesStore = defineStore('sales', () => {
     }
   }
 
-  const updateSale = async (id: string, saleData: Partial<IIncomes>) => {
+  const updateSale = async (id: string, saleData: Partial<IIncome>) => {
     loading.value = true
     try {
       const auth = getAuth()
@@ -103,9 +104,13 @@ export const useSalesStore = defineStore('sales', () => {
         lastEditedByName: userName,
         lastEditedDate: new Date(),
       }
+      if (saleData.status && saleData.status !== saleDoc.data().status) {
+        await updateUserStats(saleDoc.data().createdBy, 'remove', saleDoc.data().status)
+        await updateUserStats(user.uid, 'add', saleData.status)
+      }
 
       await setDoc(saleRef, updatedSale, { merge: true })
-      await fetchAllSales() // Обновляем список
+      await fetchAllSales()
       return updatedSale
     } catch (err) {
       console.error(err)
@@ -114,6 +119,18 @@ export const useSalesStore = defineStore('sales', () => {
       loading.value = false
     }
   }
+
+  const updateUserStats = async (userId: string, action: 'add' | 'remove', status: string) => {
+  const db = getFirestore()
+  const userRef = doc(db, 'users', userId)
+  
+  await setDoc(userRef, {
+    stats: {
+      totalSales: increment(action === 'add' ? 1 : -1),
+      [status === 'open' ? 'openSales' : 'closedSales']: increment(action === 'add' ? 1 : -1)
+    }
+  }, { merge: true })
+}
 
   const deleteSale = async (id: string) => {
     try {

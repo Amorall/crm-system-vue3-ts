@@ -1,13 +1,389 @@
-<template lang="">
-    <div>
-        
-    </div>
-</template>
-<script>
-export default {
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+import { useSalesStore } from '@/stores/sales'
+
+const authStore = useAuthStore()
+const salesStore = useSalesStore()
+
+const chartType = ref('daily');
+const chartData = ref();
+const chartOptions = ref();
+const isLoading = ref<boolean>(true)
+
+// Статистика по сделкам
+const userStats = computed(() => {
+  const userSales = salesStore.sales.filter(sale => sale.createdBy === authStore.userInfo.userId)
+  return {
+    total: userSales.length,
+    open: userSales.filter((s: { status: string }) => s.status === 'open').length,
+    closed: userSales.filter((s: { status: string }) => s.status === 'closed').length,
+    // Дополнительная статистика может быть добавлена здесь
+  }
+})
+
+const statusOptions = [
+  { label: 'На работе', value: 'working' },
+  { label: 'В отпуске', value: 'vacation' },
+  { label: 'На больничном', value: 'sick_leave' }
+]
+
+const lastLoginFormatted = computed(() => {
+  const lastLogin = authStore.userInfo.lastLogin;
+  
+  if (!lastLogin) return 'Нет данных';
+  
+  try {
+    const date = lastLogin instanceof Date 
+      ? lastLogin 
+      : 'toDate' in lastLogin 
+        ? lastLogin.toDate() 
+        : new Date(lastLogin.seconds * 1000);
     
+    return date.toLocaleString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (e) {
+    console.error('Ошибка форматирования даты:', e);
+    return 'Некорректная дата';
+  }
+});
+
+const prepareMonthlyChartData = () => {
+  const userSales = salesStore.sales.filter(sale => sale.createdBy === authStore.userInfo.userId);
+  
+  const salesByMonth = userSales.reduce((acc, sale) => {
+    let date;
+    
+    if (sale.createdDate?.toDate) {
+      date = sale.createdDate.toDate();
+    } else if (sale.createdDate?.seconds) {
+      date = new Date(sale.createdDate.seconds * 1000);
+    } else {
+      date = new Date(sale.createdDate);
+    }
+    
+    const monthYear = `${date.getMonth()+1}/${date.getFullYear()}`;
+    
+    if (!acc[monthYear]) {
+      acc[monthYear] = { open: 0, closed: 0 };
+    }
+    
+    if (sale.status === 'open') {
+      acc[monthYear].open++;
+    } else {
+      acc[monthYear].closed++;
+    }
+    
+    return acc;
+  }, {});
+
+  const months = Object.keys(salesByMonth).sort((a, b) => {
+    const [aMonth, aYear] = a.split('/').map(Number);
+    const [bMonth, bYear] = b.split('/').map(Number);
+    return aYear === bYear ? aMonth - bMonth : aYear - bYear;
+  });
+
+  // Форматируем подписи как "Янв 2023", "Фев 2023" и т.д.
+  const monthNames = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+  const formattedLabels = months.map(m => {
+    const [month, year] = m.split('/');
+    return `${monthNames[parseInt(month)-1]} ${year}`;
+  });
+
+  chartData.value = {
+    labels: formattedLabels,
+    datasets: [
+      {
+        label: 'Открытые сделки',
+        backgroundColor: '#4CAF50',
+        data: months.map(m => salesByMonth[m].open)
+      },
+      {
+        label: 'Закрытые сделки',
+        backgroundColor: '#F44336',
+        data: months.map(m => salesByMonth[m].closed)
+      }
+    ]
+  };
+
+  chartOptions.value = {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      y: {
+        ticks: {
+          precision: 0
+        }
+      }
+    }
+  };
+};
+
+const prepareChartData = () => {
+  const userSales = salesStore.sales.filter(sale => sale.createdBy === authStore.userInfo.userId);
+  
+  // Группируем сделки по дате
+  const salesByDate = userSales.reduce((acc, sale) => {
+    let date;
+    
+    // Обрабатываем разные форматы даты
+    if (sale.createdDate?.toDate) {
+      date = sale.createdDate.toDate().toLocaleDateString();
+    } else if (sale.createdDate?.seconds) {
+      date = new Date(sale.createdDate.seconds * 1000).toLocaleDateString();
+    } else {
+      date = new Date(sale.createdDate).toLocaleDateString();
+    }
+    
+    if (!acc[date]) {
+      acc[date] = { open: 0, closed: 0 };
+    }
+    
+    if (sale.status === 'open') {
+      acc[date].open++;
+    } else {
+      acc[date].closed++;
+    }
+    
+    return acc;
+  }, {});
+
+  const dates = Object.keys(salesByDate).sort();
+  const openData = dates.map(date => salesByDate[date].open);
+  const closedData = dates.map(date => salesByDate[date].closed);
+
+  chartData.value = {
+    labels: dates,
+    datasets: [
+      {
+        label: 'Открытые сделки',
+        backgroundColor: '#4CAF50',
+        data: openData
+      },
+      {
+        label: 'Закрытые сделки',
+        backgroundColor: '#F44336',
+        data: closedData
+      }
+    ]
+  };
+
+  chartOptions.value = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      position: 'top',
+    },
+    tooltip: {
+      callbacks: {
+        label: function(context) {
+          return `${context.dataset.label}: ${context.raw}`;
+        }
+      }
+    }
+  },
+  scales: {
+    y: {
+      beginAtZero: true,
+      ticks: {
+        precision: 0
+      }
+    }
+  }
+};
 }
+
+
+
+onMounted(async () => {
+  try {
+    await Promise.all([
+      salesStore.fetchAllSales(),
+      authStore.loadUserProfile()
+    ]);
+    prepareMonthlyChartData();
+  } catch (error) {
+    console.error('Ошибка загрузки данных:', error);
+  } finally {
+    isLoading.value = false;
+  }
+});
 </script>
-<style lang="">
-    
+
+<template>
+  <div class="content p-4">
+    <app-card>
+      <template #content>
+        <div class="flex flex-col md:flex-row gap-6">
+          <!-- Блок с информацией о пользователе -->
+          <div class="w-full md:w-1/3">
+            <div class="flex flex-col items-center mb-6">
+                <div class="w-32 h-32 rounded-full flex items-center justify-center text-6xl" 
+     :class="authStore.userInfo.gender === 'female' 
+       ? 'bg-pink-100 text-pink-500' 
+       : 'bg-blue-100 text-blue-500'">
+  <i class="pi pi-user text-6xl"></i>
+</div>
+            <h2 class="text-xl font-semibold text-center">
+                {{ `${authStore.userInfo.lastName} ${authStore.userInfo.firstName}` }}
+              </h2>
+              <div class="flex items-center gap-2 mt-2">
+                <app-tag :value="authStore.userInfo.jobPosition" severity="info" />
+                <app-tag :value="statusOptions.find(s => s.value === authStore.userInfo.status)?.label || 'Не указан'" 
+                         :severity="authStore.userInfo.status === 'working' ? 'success' : 
+                                   authStore.userInfo.status === 'vacation' ? 'warning' : 'danger'" />
+              </div>
+            </div>
+            
+            <div class="space-y-4">
+              <div>
+                <label class="text-gray-500 text-sm">ФИО:</label>
+                <p class="font-medium">{{ 
+                  `${authStore.userInfo.lastName || ''} 
+                  ${authStore.userInfo.firstName || ''} 
+                  ${authStore.userInfo.middleName || ''}`.trim() 
+                }}</p>
+              </div>
+              
+              <div>
+                <label class="text-gray-500 text-sm">Email:</label>
+                <p class="font-medium">{{ authStore.userInfo.email }}</p>
+              </div>
+              
+              <div>
+                <label class="text-gray-500 text-sm">Должность:</label>
+                <p class="font-medium">{{ authStore.userInfo.jobPosition }}</p>
+              </div>
+              
+              <div>
+                <label class="text-gray-500 text-sm">Пол:</label>
+                <p class="font-medium">{{ 
+                  authStore.userInfo.gender === 'Мужской' ? 'Мужской' : 
+                  authStore.userInfo.gender === 'Женский' ? 'Женский' : 'Не указан' 
+                }}</p>
+              </div>
+
+               <div>
+                <label class="text-gray-500 text-sm">Последний вход:</label>
+                <p class="font-medium">{{ lastLoginFormatted }}</p>
+              </div>
+              
+              <div>
+                <label class="text-gray-500 text-sm">Всего входов:</label>
+                <p class="font-medium">{{ authStore.userInfo.loginCount || 0 }}</p>
+              </div>
+
+               <div>
+                <label class="text-gray-500 text-sm">Статус:</label>
+                <app-select v-model="authStore.userInfo.status" :options="statusOptions" 
+                              optionLabel="label" optionValue="value" 
+                              @change="authStore.updateUserStatus($event.value)"
+                              class="w-full" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Блок со статистикой -->
+          <div class="w-full md:w-2/3">
+            <h2 class="text-xl font-semibold mb-4">Статистика сделок</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <app-card class="bg-blue-50">
+                <template #content>
+                  <div class="text-center">
+                    <div class="text-blue-600 text-2xl font-bold">{{ userStats.total }}</div>
+                    <div class="text-gray-600">Всего сделок</div>
+                  </div>
+                </template>
+              </app-card>
+              
+              <app-card class="bg-green-50">
+                <template #content>
+                  <div class="text-center">
+                    <div class="text-green-600 text-2xl font-bold">{{ userStats.open }}</div>
+                    <div class="text-gray-600">Открытые</div>
+                  </div>
+                </template>
+              </app-card>
+              
+              <app-card class="bg-orange-50">
+                <template #content>
+                  <div class="text-center">
+                    <div class="text-orange-600 text-2xl font-bold">{{ userStats.closed }}</div>
+                    <div class="text-gray-600">Закрытые</div>
+                  </div>
+                </template>
+              </app-card>
+            </div>
+
+              <h3 class="text-lg font-semibold mt-6 mb-4">Активность</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <app-card>
+                <template #content>
+                  <div class="flex items-center gap-4">
+                    <div class="bg-blue-100 p-3 rounded-full">
+                      <i class="pi pi-sign-in text-blue-600 text-xl"></i>
+                    </div>
+                    <div>
+                      <div class="text-gray-500">Последний вход</div>
+                      <div class="font-medium">{{ lastLoginFormatted }}</div>
+                    </div>
+                  </div>
+                </template>
+              </app-card>
+              
+              <app-card>
+                <template #content>
+                  <div class="flex items-center gap-4">
+                    <div class="bg-green-100 p-3 rounded-full">
+                      <i class="pi pi-chart-line text-green-600 text-xl"></i>
+                    </div>
+                    <div>
+                      <div class="text-gray-500">Всего входов</div>
+                      <div class="font-medium">{{ authStore.userInfo.loginCount || 0 }}</div>
+                    </div>
+                  </div>
+                </template>
+              </app-card>
+            </div>
+            <div class="flex gap-2 mb-4">
+  <app-button 
+    label="По дням" 
+    severity="secondary" 
+    @click="prepareChartData" 
+    :outlined="chartType !== 'daily'"
+  />
+  <app-button 
+    label="По месяцам" 
+    severity="secondary" 
+    @click="prepareMonthlyChartData" 
+    :outlined="chartType !== 'monthly'"
+  />
+</div>
+            <div class="mt-6">
+  <h3 class="text-lg font-semibold mb-4">Динамика сделок</h3>
+  <div class="card">
+    <app-chart
+      type="bar" 
+      :data="chartData" 
+      :options="chartOptions" 
+      style="height: 300px" 
+    />
+  </div>
+</div>
+          </div>
+        </div>
+      </template>
+    </app-card>
+  </div>
+</template>
+
+<style scoped>
+/* Дополнительные стили при необходимости */
 </style>
