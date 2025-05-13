@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw, RouteLocationNormalized, NavigationGuardNext } from 'vue-router'
 import { getAuth, onAuthStateChanged } from 'firebase/auth'
 import { useAuthStore } from '@/stores/auth'
+import { doc, getDoc, getFirestore } from 'firebase/firestore'
 
 const checkAuth = (
   to: RouteLocationNormalized,

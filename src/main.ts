@@ -10,6 +10,7 @@ import Aura from '@primeuix/themes/nora'
 import ToastService from 'primevue/toastservice'
 import ConfirmationService from 'primevue/confirmationservice';
 
+//Prime Vue components
 import Menubar from 'primevue/menubar';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
@@ -26,6 +27,12 @@ import Select from 'primevue/select';
 import ConfirmDialog from 'primevue/confirmdialog';
 import Tag from 'primevue/tag';
 import Chart from 'primevue/chart';
+import Chip from 'primevue/chip';
+import DataView from 'primevue/dataview';
+import Textarea from 'primevue/textarea';
+import MultiSelect from 'primevue/multiselect';
+import InputNumber from 'primevue/inputnumber';
+import Tooltip from 'primevue/tooltip';
 
 import App from './App.vue'
 import router from './router'
@@ -96,5 +103,12 @@ app.component('app-select', Select)
 app.component('app-confirmdialog', ConfirmDialog)
 app.component('app-tag', Tag)
 app.component('app-chart', Chart)
+app.component('app-chip', Chip)
+app.component('app-dataview', DataView)
+app.component('app-textarea', Textarea)
+app.component('app-multiselect', MultiSelect)
+app.component('app-inputnumber', InputNumber)
+
+app.directive('tooltip', Tooltip);
 
 app.mount('#app')

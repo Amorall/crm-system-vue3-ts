@@ -24,7 +24,7 @@ const firstNameTouched = ref<boolean>(false);
 const lastNameTouched = ref<boolean>(false);
 const middleNameTouched = ref<boolean>(false);
 const positionTouched = ref<boolean>(false);
-const selectedPosition = ref<string>('');
+const selectedPosition = ref<{name: string, code: string} | null>(null);
 
 const emailDomains: string[] = [
   'gmail.com', 'mail.ru', 'yandex.ru', 'outlook.com', 'yahoo.com',
@@ -155,7 +155,7 @@ const signup = async () => {
       lastName: lastName.value,
       middleName: middleName.value,
       gender: gender.value,
-      jobPosition: selectedPosition.value.name,
+      jobPosition: selectedPosition.value?.name || '',
     }, 'signup');
 
     if (!authStore.error) {

@@ -195,5 +195,13 @@ export const useAuthStore = defineStore('auth', () => {
   }
 }
 
+const canViewProfile = (targetUserId: string) => {
+  const currentUser = userInfo.value;
+  // Админ (permission=3) может смотреть все профили
+  if (currentUser.permission === 3) return true;
+  // Остальные только свой профиль
+  return currentUser.userId === targetUserId;
+};
+
   return { userInfo, error, loader, logout, auth, updateUserStatus, trackLogin, loadUserProfile, }
 })

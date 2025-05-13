@@ -2,23 +2,29 @@
 import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useSalesStore } from '@/stores/sales'
+import { Timestamp } from 'firebase/firestore';
+import type { IIncome } from '@/utils/interfaces';
+
+interface IMonthlySales {
+  [key: string]: {
+    open: number;
+    closed: number;
+  };
+}
 
 const authStore = useAuthStore()
 const salesStore = useSalesStore()
 
-const chartType = ref('daily');
 const chartData = ref();
 const chartOptions = ref();
 const isLoading = ref<boolean>(true)
 
-// Статистика по сделкам
 const userStats = computed(() => {
   const userSales = salesStore.sales.filter(sale => sale.createdBy === authStore.userInfo.userId)
   return {
     total: userSales.length,
     open: userSales.filter((s: { status: string }) => s.status === 'open').length,
     closed: userSales.filter((s: { status: string }) => s.status === 'closed').length,
-    // Дополнительная статистика может быть добавлена здесь
   }
 })
 
@@ -54,17 +60,23 @@ const lastLoginFormatted = computed(() => {
 });
 
 const prepareMonthlyChartData = () => {
-  const userSales = salesStore.sales.filter(sale => sale.createdBy === authStore.userInfo.userId);
+  const userSales = salesStore.sales.filter((sale: IIncome) => 
+    sale.createdBy === authStore.userInfo.userId
+  );
   
-  const salesByMonth = userSales.reduce((acc, sale) => {
-    let date;
+  const salesByMonth = userSales.reduce((acc: IMonthlySales, sale: IIncome) => {
+    let date: Date;
     
-    if (sale.createdDate?.toDate) {
-      date = sale.createdDate.toDate();
-    } else if (sale.createdDate?.seconds) {
-      date = new Date(sale.createdDate.seconds * 1000);
-    } else {
-      date = new Date(sale.createdDate);
+    if (sale.createdDate && typeof sale.createdDate === 'object' && 'toDate' in sale.createdDate) {
+      date = (sale.createdDate as unknown as Timestamp).toDate();
+    } 
+    else if (sale.createdDate && typeof sale.createdDate === 'object' && 'seconds' in sale.createdDate) {
+      date = new Date((sale.createdDate as { seconds: number }).seconds * 1000);
+    } 
+    else {
+      date = sale.createdDate instanceof Date 
+        ? sale.createdDate 
+        : new Date(sale.createdDate as string | number);
     }
     
     const monthYear = `${date.getMonth()+1}/${date.getFullYear()}`;
@@ -80,7 +92,7 @@ const prepareMonthlyChartData = () => {
     }
     
     return acc;
-  }, {});
+  }, {} as IMonthlySales);
 
   const months = Object.keys(salesByMonth).sort((a, b) => {
     const [aMonth, aYear] = a.split('/').map(Number);
@@ -124,83 +136,6 @@ const prepareMonthlyChartData = () => {
   };
 };
 
-const prepareChartData = () => {
-  const userSales = salesStore.sales.filter(sale => sale.createdBy === authStore.userInfo.userId);
-  
-  // Группируем сделки по дате
-  const salesByDate = userSales.reduce((acc, sale) => {
-    let date;
-    
-    // Обрабатываем разные форматы даты
-    if (sale.createdDate?.toDate) {
-      date = sale.createdDate.toDate().toLocaleDateString();
-    } else if (sale.createdDate?.seconds) {
-      date = new Date(sale.createdDate.seconds * 1000).toLocaleDateString();
-    } else {
-      date = new Date(sale.createdDate).toLocaleDateString();
-    }
-    
-    if (!acc[date]) {
-      acc[date] = { open: 0, closed: 0 };
-    }
-    
-    if (sale.status === 'open') {
-      acc[date].open++;
-    } else {
-      acc[date].closed++;
-    }
-    
-    return acc;
-  }, {});
-
-  const dates = Object.keys(salesByDate).sort();
-  const openData = dates.map(date => salesByDate[date].open);
-  const closedData = dates.map(date => salesByDate[date].closed);
-
-  chartData.value = {
-    labels: dates,
-    datasets: [
-      {
-        label: 'Открытые сделки',
-        backgroundColor: '#4CAF50',
-        data: openData
-      },
-      {
-        label: 'Закрытые сделки',
-        backgroundColor: '#F44336',
-        data: closedData
-      }
-    ]
-  };
-
-  chartOptions.value = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      position: 'top',
-    },
-    tooltip: {
-      callbacks: {
-        label: function(context) {
-          return `${context.dataset.label}: ${context.raw}`;
-        }
-      }
-    }
-  },
-  scales: {
-    y: {
-      beginAtZero: true,
-      ticks: {
-        precision: 0
-      }
-    }
-  }
-};
-}
-
-
-
 onMounted(async () => {
   try {
     await Promise.all([
@@ -225,7 +160,7 @@ onMounted(async () => {
           <div class="w-full md:w-1/3">
             <div class="flex flex-col items-center mb-6">
                 <div class="w-32 h-32 rounded-full flex items-center justify-center text-6xl" 
-     :class="authStore.userInfo.gender === 'female' 
+     :class="authStore.userInfo.gender === 'Женский' 
        ? 'bg-pink-100 text-pink-500' 
        : 'bg-blue-100 text-blue-500'">
   <i class="pi pi-user text-6xl"></i>
@@ -353,18 +288,7 @@ onMounted(async () => {
               </app-card>
             </div>
             <div class="flex gap-2 mb-4">
-  <app-button 
-    label="По дням" 
-    severity="secondary" 
-    @click="prepareChartData" 
-    :outlined="chartType !== 'daily'"
-  />
-  <app-button 
-    label="По месяцам" 
-    severity="secondary" 
-    @click="prepareMonthlyChartData" 
-    :outlined="chartType !== 'monthly'"
-  />
+
 </div>
             <div class="mt-6">
   <h3 class="text-lg font-semibold mb-4">Динамика сделок</h3>

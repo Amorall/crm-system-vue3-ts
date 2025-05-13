@@ -1,8 +1,16 @@
+import type { Timestamp } from "firebase/firestore"
+
 export type ExpenseCategory = 'purchase' | 'marketing' | 'salary' | 'other'
 
+export interface IProductInSale {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+}
 export interface IIncome {
   id: string
-  productName: string
+  products: IProductInSale[]
   clientName: string
   clientPhone?: string
   clientEmail?: string
@@ -10,12 +18,12 @@ export interface IIncome {
   clientTg?: string
   price: string
   status: string
-  createdDate: Date
+  createdDate: Date | Timestamp
   createdBy?: string
   createdByName?: string
   lastEditedBy?: string
   lastEditedByName?: string
-  lastEditedDate: Date
+  lastEditedDate: Date | Timestamp
 }
 
 export interface IExpense {
@@ -26,7 +34,20 @@ export interface IExpense {
   description?: string
   createdBy: string
   createdByName: string
-  createdDate: Date
+  createdDate: Date | Timestamp
   lastEditedBy: string
   lastEditedByName: string
+}
+
+export interface IProduct {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  stock: number;
+  category: string;
+  features: string[];
+  imageUrl?: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
