@@ -24,7 +24,7 @@ const clientWhApp = ref<string>('')
 const clientTg = ref<string>('')
 const editingSaleId = ref<string>('')
 const searchQuery = ref<string>('')
-const status = ref<string>('open')
+const status = ref<string>('')
 const visible = ref<boolean>(false)
 const isEditing = ref<boolean>(false)
 const productsDialogVisible = ref<boolean>(false)
@@ -46,7 +46,7 @@ const productsTouched = ref<boolean>(false)
 
 const validateClientName = (value: string): string | true => {
   if (!value) return 'ФИО клиента обязательно'
-  if (value.length > 100) return 'Не более 100 символов'
+  if (value.length > 70) return 'Не более 100 символов'
   return true
 }
 
@@ -78,19 +78,13 @@ const validateProducts = (products: Array<any>): string | true => {
 }
 
 // Вычисляемые свойства для ошибок
+const hasContactFilled = computed(() => {
+  return clientPhone.value || clientEmail.value || clientWhApp.value || clientTg.value
+})
+
 const clientNameError = computed(() => {
   if (!clientNameTouched.value) return null
   return validateClientName(clientName.value) === true ? null : validateClientName(clientName.value)
-})
-
-const clientEmailError = computed(() => {
-  if (!clientEmailTouched.value) return null
-  return validateEmail(clientEmail.value) === true ? null : validateEmail(clientEmail.value)
-})
-
-const clientTgError = computed(() => {
-  if (!clientTgTouched.value) return null
-  return validateTelegram(clientTg.value) === true ? null : validateTelegram(clientTg.value)
 })
 
 const productsError = computed(() => {
@@ -98,14 +92,24 @@ const productsError = computed(() => {
   return validateProducts(selectedProducts.value) === true ? null : validateProducts(selectedProducts.value)
 })
 
+const clientPhoneError = computed(() => {
+  if (!clientPhoneTouched.value || hasContactFilled.value) return null
+  return validatePhone(clientPhone.value) === true ? null : validatePhone(clientPhone.value)
+})
+
+const clientEmailError = computed(() => {
+  if (!clientEmailTouched.value || hasContactFilled.value) return null
+  return validateEmail(clientEmail.value) === true ? null : validateEmail(clientEmail.value)
+})
+
 const clientWhAppError = computed(() => {
-  if (!clientWhAppTouched.value) return null
+  if (!clientWhAppTouched.value || hasContactFilled.value) return null
   return validateWhApp(clientWhApp.value) === true ? null : validateWhApp(clientWhApp.value)
 })
 
-const clientPhoneError = computed(() => {
-  if (!clientPhoneTouched.value) return null
-  return validatePhone(clientPhone.value) === true ? null : validatePhone(clientPhone.value)
+const clientTgError = computed(() => {
+  if (!clientTgTouched.value || hasContactFilled.value) return null
+  return validateTelegram(clientTg.value) === true ? null : validateTelegram(clientTg.value)
 })
 
 // Проверка наличия хотя бы одного контакта
@@ -116,17 +120,31 @@ const hasAtLeastOneContact = computed(() => {
 const contactError = computed(() => {
   const touched = clientPhoneTouched.value || clientEmailTouched.value ||
     clientWhAppTouched.value || clientTgTouched.value
-  if (!touched) return null
-  return hasAtLeastOneContact.value ? null : 'Укажите хотя бы один контакт'
+  if (!touched || hasContactFilled.value) return null
+  return 'Укажите хотя бы один контакт'
 })
 
 const isClientNameInvalid = computed(() => clientNameTouched.value && clientNameError.value !== null)
-const isClientEmailInvalid = computed(() => clientEmailTouched.value && clientEmailError.value !== null)
-const isClientTgInvalid = computed(() => clientTgTouched.value && clientTgError.value !== null)
 const isProductsInvalid = computed(() => productsTouched.value && productsError.value !== null)
-const isClientWhAppInvalid = computed(() => clientWhAppTouched.value && clientWhAppError.value !== null)
-const isClientPhoneInvalid = computed(() => clientPhoneTouched.value && clientPhoneError.value !== null)
-const isContactInvalid = computed(() => contactError.value !== null)
+const isClientPhoneInvalid = computed(() => {
+  return clientPhoneTouched.value && clientPhoneError.value !== null && !hasContactFilled.value
+})
+
+const isClientEmailInvalid = computed(() => {
+  return clientEmailTouched.value && clientEmailError.value !== null && !hasContactFilled.value
+})
+
+const isClientWhAppInvalid = computed(() => {
+  return clientWhAppTouched.value && clientWhAppError.value !== null && !hasContactFilled.value
+})
+
+const isClientTgInvalid = computed(() => {
+  return clientTgTouched.value && clientTgError.value !== null && !hasContactFilled.value
+})
+
+const isContactInvalid = computed(() => {
+  return contactError.value !== null && !hasContactFilled.value
+})
 
 
 // Общая валидность формы
@@ -384,10 +402,13 @@ const openEditDialog = (sale: any) => {
 const saveSale = async () => {
   clientNameTouched.value = true
   productsTouched.value = true
-  clientPhoneTouched.value = true
-  clientEmailTouched.value = true
-  clientWhAppTouched.value = true
-  clientTgTouched.value = true
+
+  if (!hasContactFilled.value) {
+    clientPhoneTouched.value = true
+    clientEmailTouched.value = true
+    clientWhAppTouched.value = true
+    clientTgTouched.value = true
+  }
 
   if (!isFormValid.value) {
     toast.add({
@@ -475,7 +496,7 @@ const resetForm = () => {
   clientTg.value = ''
   isEditing.value = false
   editingSaleId.value = ''
-  status.value = 'open'
+  status.value = ''
 
   clientNameTouched.value = false
   productsTouched.value = false
@@ -499,39 +520,6 @@ watch(selectedProducts, (newVal) => {
   }
 }, { deep: true })
 
-watch(status, async (newStatus, oldStatus) => {
-  if (!isEditing.value || !editingSaleId.value) return
-
-  try {
-    if (newStatus === 'canceled' && oldStatus !== 'canceled') {
-      // При изменении статуса на "отменена" возвращаем товары
-      const sale = salesStore.sales.find(s => s.id === editingSaleId.value)
-      if (sale?.products) {
-        await salesStore.updateProductStocks(
-          sale.products.map(p => ({ id: p.id, quantity: p.quantity || 1 })),
-          'add'
-        )
-      }
-    } else if (oldStatus === 'canceled' && newStatus !== 'canceled') {
-      // При изменении статуса с "отменена" вычитаем товары
-      const sale = salesStore.sales.find(s => s.id === editingSaleId.value)
-      if (sale?.products) {
-        await salesStore.updateProductStocks(
-          sale.products.map(p => ({ id: p.id, quantity: p.quantity || 1 })),
-          'remove'
-        )
-      }
-    }
-  } catch (error) {
-    console.error('Ошибка обновления стока:', error)
-    toast.add({
-      severity: 'error',
-      summary: 'Ошибка',
-      detail: 'Не удалось обновить количество товаров',
-      life: 2000
-    })
-  }
-})
 
 onMounted(async () => {
   await Promise.all([
@@ -571,58 +559,62 @@ onMounted(async () => {
             <span class="block mb-2">Поля, помеченные *, обязательны для заполнения</span>
 
             <div class="field">
-              <label class="block mb-2 font-medium">Продукты</label>
-              <app-multiselect v-model="selectedProductIds" :options="productOptions" optionLabel="name"
-                optionValue="id" filter placeholder="Выберите продукты*" display="chip"
-                :class="{ 'p-invalid': isProductsInvalid }" @blur="productsTouched = true" class="h-[50px] w-full">
-                <template #option="slotProps">
-                  <div class="flex items-center justify-between w-full">
-                    <div class="flex items-center gap-2">
-                      <i class="pi pi-box text-blue-500" />
-                      <span>{{ slotProps.option.name }}</span>
-                      <span v-if="isProductSelected(slotProps.option.id)" class="text-green-500 text-xs ml-2">уже
-                        выбрано</span>
+              <label class="block mb-2 font-medium">Основная информация:</label>
+
+              <app-floatlabel variant="on">
+                <app-multiselect v-model="selectedProductIds" :options="productOptions" optionLabel="name"
+                  optionValue="id" filter display="chip" :class="{ 'p-invalid': isProductsInvalid }"
+                  @blur="productsTouched = true" class="h-[50px] w-full">
+                  <template #option="slotProps">
+                    <div class="flex items-center justify-between w-full">
+                      <div class="flex items-center gap-2">
+                        <i class="pi pi-box text-blue-500" />
+                        <span>{{ slotProps.option.name }}</span>
+                        <span v-if="isProductSelected(slotProps.option.id)" class="text-green-500 text-xs ml-2">уже
+                          выбрано</span>
+                      </div>
+                      <div class="text-sm text-gray-500">
+                        {{ slotProps.option.price }} ₽ (остаток: {{ slotProps.option.stock }})
+                      </div>
                     </div>
-                    <div class="text-sm text-gray-500">
-                      {{ slotProps.option.price }} ₽ (остаток: {{ slotProps.option.stock }})
+                  </template>
+
+                  <template #value="slotProps">
+                    <div v-if="slotProps.value">
+                      <div v-for="option of getSelectedProducts(slotProps.value)" :key="option.id"
+                        class="inline-flex items-center gap-1 mr-2 bg-blue-100 rounded-full px-2 py-1">
+                        <span>{{ option.name }}</span>
+                        <span class="text-xs text-blue-600">({{ option.quantity || 1 }})</span>
+                        <i class="pi pi-times-circle ml-1 text-blue-600 hover:text-blue-800 cursor-pointer"
+                          @click.stop="removeProduct(option.id)" />
+                      </div>
                     </div>
-                  </div>
-                </template>
+                  </template>
 
-                <template #value="slotProps">
-                  <div v-if="slotProps.value">
-                    <div v-for="option of getSelectedProducts(slotProps.value)" :key="option.id"
-                      class="inline-flex items-center gap-1 mr-2 bg-blue-100 rounded-full px-2 py-1">
-                      <span>{{ option.name }}</span>
-                      <span class="text-xs text-blue-600">({{ option.quantity || 1 }})</span>
-                      <i class="pi pi-times-circle ml-1 text-blue-600 hover:text-blue-800 cursor-pointer"
-                        @click.stop="removeProduct(option.id)" />
+                  <template #dropdownicon>
+                    <i class="pi pi-chevron-down" />
+                  </template>
+
+                  <template #filtericon>
+                    <i class="pi pi-search" />
+                  </template>
+
+                  <template #header>
+                    <div class="font-medium px-3 py-2">Продукты на складе</div>
+                  </template>
+
+                  <template #footer>
+                    <div class="flex justify-between p-3">
+                      <div class="text-sm text-gray-500">
+                        Выбрано: {{ selectedProducts.length }} продукт(ов)
+                      </div>
+                      <app-button label="Очистить все" severity="danger" text size="small" icon="pi pi-times"
+                        @click.stop="resetForm" :disabled="selectedProducts.length === 0" />
                     </div>
-                  </div>
-                </template>
-
-                <template #dropdownicon>
-                  <i class="pi pi-chevron-down" />
-                </template>
-
-                <template #filtericon>
-                  <i class="pi pi-search" />
-                </template>
-
-                <template #header>
-                  <div class="font-medium px-3 py-2">Доступные продукты</div>
-                </template>
-
-                <template #footer>
-                  <div class="flex justify-between p-3">
-                    <div class="text-sm text-gray-500">
-                      Выбрано: {{ selectedProducts.length }} продукт(ов)
-                    </div>
-                    <app-button label="Очистить все" severity="danger" text size="small" icon="pi pi-times"
-                      @click.stop="resetForm" :disabled="selectedProducts.length === 0" />
-                  </div>
-                </template>
-              </app-multiselect>
+                  </template>
+                </app-multiselect>
+                <label>Список продуктов *</label>
+              </app-floatlabel>
               <small v-if="isProductsInvalid" class="text-red-500 text-sm">
                 {{ productsError }}
               </small>
@@ -640,52 +632,62 @@ onMounted(async () => {
             </div>
 
             <div class="field">
-              <app-inputtext v-model="clientName" placeholder="ФИО клиента *"
-                :class="{ 'p-invalid': isClientNameInvalid }" @blur="clientNameTouched = true"
-                class="w-full p-2 border rounded" />
+              <app-floatlabel variant="on">
+                <app-inputtext v-model="clientName" :class="{ 'p-invalid': isClientNameInvalid }"
+                  @blur="clientNameTouched = true" class="w-full" />
+                <label>ФИО клиента *</label>
+              </app-floatlabel>
               <small v-if="isClientNameInvalid" class="text-red-500 text-sm">
                 {{ clientNameError }}
               </small>
             </div>
 
-            <span>Контакты * (хотя бы один):</span>
+            <span class="font-medium">Контакты (заполнен должен быть хотя бы один):</span>
             <small v-if="isContactInvalid" class="text-red-500 text-sm">
               {{ contactError }}
             </small>
 
             <div class="field">
-              <app-inputmask v-model="clientPhone" placeholder="Номер для связи" mask="+7 (999) 999-99-99"
-                :class="{ 'p-invalid': isClientPhoneInvalid }" @blur="clientPhoneTouched = true"
-                class="w-full p-2 border rounded" />
+              <app-floatlabel variant="on">
+                <app-inputmask v-model="clientPhone" mask="+7 (999) 999-99-99"
+                  :class="{ 'p-invalid': isClientPhoneInvalid }" @blur="clientPhoneTouched = true" class="w-full" />
+                <label>Номер для связи</label>
+              </app-floatlabel>
               <small v-if="isClientPhoneInvalid" class="text-red-500 text-sm">
                 {{ clientPhoneError }}
               </small>
             </div>
 
             <div class="field">
-              <app-inputmask v-model="clientWhApp" placeholder="Номер WhatsApp" mask="+7 (999) 999-99-99"
-                :class="{ 'p-invalid': isClientWhAppInvalid }" @blur="clientWhAppTouched = true"
-                class="w-full p-2 border rounded" />
+              <app-floatlabel variant="on">
+                <app-inputmask v-model="clientWhApp" mask="+7 (999) 999-99-99"
+                  :class="{ 'p-invalid': isClientWhAppInvalid }" @blur="clientWhAppTouched = true" class="w-full" />
+                <label>WhatsApp</label>
+              </app-floatlabel>
               <small v-if="isClientWhAppInvalid" class="text-red-500 text-sm">
                 {{ clientWhAppError }}
               </small>
             </div>
 
             <div class="field">
-              <app-inputtext v-model="clientEmail" placeholder="Email клиента"
-                :class="{ 'p-invalid': isClientEmailInvalid }" @blur="clientEmailTouched = true"
-                class="w-full p-2 border rounded" />
-              <small v-if="isClientEmailInvalid" class="text-red-500 text-sm">
-                {{ clientEmailError }}
+              <app-floatlabel variant="on">
+                <app-inputtext v-model="clientTg" :class="{ 'p-invalid': isClientTgInvalid }"
+                  @blur="clientTgTouched = true" class="w-full" />
+                <label>Telegram</label>
+              </app-floatlabel>
+              <small v-if="isClientTgInvalid" class="text-red-500 text-sm">
+                {{ clientTgError }}
               </small>
             </div>
 
             <div class="field">
-              <app-inputtext v-model="clientTg" placeholder="Telegram клиента"
-                :class="{ 'p-invalid': isClientTgInvalid }" @blur="clientTgTouched = true"
-                class="w-full p-2 border rounded" />
-              <small v-if="isClientTgInvalid" class="text-red-500 text-sm">
-                {{ clientTgError }}
+              <app-floatlabel variant="on">
+                <app-inputtext v-model="clientEmail" :class="{ 'p-invalid': isClientEmailInvalid }"
+                  @blur="clientEmailTouched = true" class="w-full" />
+                <label>Email</label>
+              </app-floatlabel>
+              <small v-if="isClientEmailInvalid" class="text-red-500 text-sm">
+                {{ clientEmailError }}
               </small>
             </div>
 
@@ -849,4 +851,6 @@ onMounted(async () => {
 
 </template>
 
-<style scoped></style>
+<style scoped>
+
+</style>

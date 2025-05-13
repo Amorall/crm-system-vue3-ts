@@ -9,6 +9,7 @@ interface IMonthlySales {
   [key: string]: {
     open: number;
     closed: number;
+    canceled: number; 
   };
 }
 
@@ -25,6 +26,7 @@ const userStats = computed(() => {
     total: userSales.length,
     open: userSales.filter((s: { status: string }) => s.status === 'open').length,
     closed: userSales.filter((s: { status: string }) => s.status === 'closed').length,
+    canceled: userSales.filter((s: { status: string }) => s.status === 'canceled').length
   }
 })
 
@@ -64,6 +66,30 @@ const prepareMonthlyChartData = () => {
     sale.createdBy === authStore.userInfo.userId
   );
   
+  if (userSales.length === 0) {
+    chartData.value = {
+      labels: ['Нет данных'],
+      datasets: [
+        {
+          label: 'Открытые сделки',
+          backgroundColor: '#4CAF50',
+          data: [0]
+        },
+        {
+          label: 'Закрытые сделки',
+          backgroundColor: '#F44336',
+          data: [0]
+        },
+        {
+          label: 'Отмененные сделки',
+          backgroundColor: '#9E9E9E',
+          data: [0]
+        }
+      ]
+    };
+    return;
+  }
+  
   const salesByMonth = userSales.reduce((acc: IMonthlySales, sale: IIncome) => {
     let date: Date;
     
@@ -82,13 +108,15 @@ const prepareMonthlyChartData = () => {
     const monthYear = `${date.getMonth()+1}/${date.getFullYear()}`;
     
     if (!acc[monthYear]) {
-      acc[monthYear] = { open: 0, closed: 0 };
+      acc[monthYear] = { open: 0, closed: 0, canceled: 0 };
     }
     
     if (sale.status === 'open') {
       acc[monthYear].open++;
-    } else {
+    } else if (sale.status === 'closed') {
       acc[monthYear].closed++;
+    } else if (sale.status === 'canceled') {
+      acc[monthYear].canceled++;
     }
     
     return acc;
@@ -97,28 +125,31 @@ const prepareMonthlyChartData = () => {
   const months = Object.keys(salesByMonth).sort((a, b) => {
     const [aMonth, aYear] = a.split('/').map(Number);
     const [bMonth, bYear] = b.split('/').map(Number);
-    return aYear === bYear ? aMonth - bMonth : aYear - bYear;
+    return aYear - bYear || aMonth - bMonth;
   });
 
-  // Форматируем подписи как "Янв 2023", "Фев 2023" и т.д.
-  const monthNames = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
-  const formattedLabels = months.map(m => {
-    const [month, year] = m.split('/');
-    return `${monthNames[parseInt(month)-1]} ${year}`;
+  const formattedLabels = months.map(month => {
+    const [m, y] = month.split('/');
+    return `${m.padStart(2, '0')}.${y}`;
   });
-
+  
   chartData.value = {
     labels: formattedLabels,
     datasets: [
       {
         label: 'Открытые сделки',
         backgroundColor: '#4CAF50',
-        data: months.map(m => salesByMonth[m].open)
+        data: months.map(m => salesByMonth[m]?.open || 0)
       },
       {
         label: 'Закрытые сделки',
         backgroundColor: '#F44336',
-        data: months.map(m => salesByMonth[m].closed)
+        data: months.map(m => salesByMonth[m]?.closed || 0)
+      },
+      {
+        label: 'Отмененные сделки',
+        backgroundColor: '#9E9E9E',
+        data: months.map(m => salesByMonth[m]?.canceled || 0)
       }
     ]
   };
@@ -159,13 +190,13 @@ onMounted(async () => {
           <!-- Блок с информацией о пользователе -->
           <div class="w-full md:w-1/3">
             <div class="flex flex-col items-center mb-6">
-                <div class="w-32 h-32 rounded-full flex items-center justify-center text-6xl" 
-     :class="authStore.userInfo.gender === 'Женский' 
-       ? 'bg-pink-100 text-pink-500' 
-       : 'bg-blue-100 text-blue-500'">
-  <i class="pi pi-user text-6xl"></i>
-</div>
-            <h2 class="text-xl font-semibold text-center">
+              <div class="w-32 h-32 rounded-full flex items-center justify-center text-6xl" 
+                :class="authStore.userInfo.gender === 'Женский' 
+                  ? 'bg-pink-100 text-pink-500' 
+                  : 'bg-blue-100 text-blue-500'">
+                <i class="pi pi-user text-6xl"></i>
+              </div>
+              <h2 class="text-xl font-semibold text-center">
                 {{ `${authStore.userInfo.lastName} ${authStore.userInfo.firstName}` }}
               </h2>
               <div class="flex items-center gap-2 mt-2">
@@ -204,7 +235,7 @@ onMounted(async () => {
                 }}</p>
               </div>
 
-               <div>
+              <div>
                 <label class="text-gray-500 text-sm">Последний вход:</label>
                 <p class="font-medium">{{ lastLoginFormatted }}</p>
               </div>
@@ -214,7 +245,7 @@ onMounted(async () => {
                 <p class="font-medium">{{ authStore.userInfo.loginCount || 0 }}</p>
               </div>
 
-               <div>
+              <div>
                 <label class="text-gray-500 text-sm">Статус:</label>
                 <app-select v-model="authStore.userInfo.status" :options="statusOptions" 
                               optionLabel="label" optionValue="value" 
@@ -228,7 +259,7 @@ onMounted(async () => {
           <div class="w-full md:w-2/3">
             <h2 class="text-xl font-semibold mb-4">Статистика сделок</h2>
             
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
               <app-card class="bg-blue-50">
                 <template #content>
                   <div class="text-center">
@@ -255,9 +286,18 @@ onMounted(async () => {
                   </div>
                 </template>
               </app-card>
+              
+              <app-card class="bg-gray-50">
+                <template #content>
+                  <div class="text-center">
+                    <div class="text-gray-600 text-2xl font-bold">{{ userStats.canceled }}</div>
+                    <div class="text-gray-600">Отмененные</div>
+                  </div>
+                </template>
+              </app-card>
             </div>
 
-              <h3 class="text-lg font-semibold mt-6 mb-4">Активность</h3>
+            <h3 class="text-lg font-semibold mt-6 mb-4">Активность</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <app-card>
                 <template #content>
@@ -287,20 +327,22 @@ onMounted(async () => {
                 </template>
               </app-card>
             </div>
-            <div class="flex gap-2 mb-4">
-
-</div>
+            
             <div class="mt-6">
-  <h3 class="text-lg font-semibold mb-4">Динамика сделок</h3>
-  <div class="card">
-    <app-chart
-      type="bar" 
-      :data="chartData" 
-      :options="chartOptions" 
-      style="height: 300px" 
-    />
-  </div>
-</div>
+              <h3 class="text-lg font-semibold mb-4">Динамика сделок</h3>
+              <div class="card">
+                <app-chart
+                  v-if="chartData"
+                  type="bar" 
+                  :data="chartData" 
+                  :options="chartOptions" 
+                  style="height: 300px" 
+                />
+                <div v-else class="text-center py-8 text-gray-500">
+                  Нет данных для отображения графика
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </template>

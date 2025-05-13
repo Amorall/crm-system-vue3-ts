@@ -7,9 +7,7 @@ import {
   orderBy,
   getDocs,
   doc,
-  setDoc,
   getDoc,
-  deleteDoc,
   increment,
   Timestamp,
   writeBatch,
@@ -37,7 +35,7 @@ export const useSalesStore = defineStore('sales', () => {
           ...data,
           id: doc.id,
           createdDate: data.createdDate?.toDate?.() || data.createdDate,
-          lastEditedDate: data.lastEditedDate?.toDate?.() || data.lastEditedDate
+          lastEditedDate: data.lastEditedDate?.toDate?.() || data.lastEditedDate,
         } as IIncome
       })
     } catch (err) {
@@ -49,19 +47,29 @@ export const useSalesStore = defineStore('sales', () => {
   }
 
   const updateProductStocks = async (products: Array<{id: string, quantity: number}>, action: 'add' | 'remove') => {
-    const db = getFirestore()
-    const batch = writeBatch(db)
+  const db = getFirestore();
+  const batch = writeBatch(db);
+  
+  for (const product of products) {
+    const productRef = doc(db, 'products', product.id);
+    const productDoc = await getDoc(productRef);
     
-    for (const product of products) {
-      const productRef = doc(db, 'products', product.id)
-      const quantityChange = action === 'add' ? product.quantity : -product.quantity
-      batch.update(productRef, {
-        stock: increment(quantityChange)
-      })
+    if (productDoc.exists()) {
+      const currentStock = productDoc.data().stock || 0;
+      const newStock = action === 'add' 
+        ? currentStock + product.quantity
+        : currentStock - product.quantity;
+      
+      if (newStock < 0) {
+        throw new Error(`Недостаточно товара ${productDoc.data().name} на складе`);
+      }
+      
+      batch.update(productRef, { stock: newStock });
     }
-    
-    await batch.commit()
   }
+  
+  await batch.commit();
+}
 
   const addSale = async (saleData: Omit<IIncome, 'id' | 'createdDate'>) => {
     loading.value = true
@@ -95,20 +103,24 @@ export const useSalesStore = defineStore('sales', () => {
       // Используем транзакцию
       const batch = writeBatch(db)
       batch.set(doc(db, 'incomes', saleId), newSale)
-      
+
       // Обновляем статистику
-      batch.set(doc(db, 'users', user.uid), {
-        stats: {
-          totalSales: increment(1),
-          [newSale.status === 'open' ? 'openSales' : 'closedSales']: increment(1)
-        }
-      }, { merge: true })
+      batch.set(
+        doc(db, 'users', user.uid),
+        {
+          stats: {
+            totalSales: increment(1),
+            [newSale.status === 'open' ? 'openSales' : 'closedSales']: increment(1),
+          },
+        },
+        { merge: true },
+      )
 
       // Вычитаем товары (если статус не "отменена")
       if (newSale.status !== 'canceled' && newSale.products) {
         await updateProductStocks(
-          newSale.products.map(p => ({ id: p.id, quantity: p.quantity || 1 })),
-          'remove'
+          newSale.products.map((p) => ({ id: p.id, quantity: p.quantity || 1 })),
+          'remove',
         )
       }
 
@@ -122,28 +134,28 @@ export const useSalesStore = defineStore('sales', () => {
     }
   }
 
-  const updateSale = async (id: string, saleData: Partial<IIncome>) => {
-  loading.value = true
+ const updateSale = async (id: string, saleData: Partial<IIncome>) => {
+  loading.value = true;
   try {
-    const auth = getAuth()
-    const user = auth.currentUser
-    if (!user) throw new Error('Пользователь не авторизован')
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (!user) throw new Error('Пользователь не авторизован');
 
-    const db = getFirestore()
-    const saleRef = doc(db, 'incomes', id)
-    const saleDoc = await getDoc(saleRef)
-    if (!saleDoc.exists()) throw new Error('Продажа не найдена')
+    const db = getFirestore();
+    const saleRef = doc(db, 'incomes', id);
+    const saleDoc = await getDoc(saleRef);
+    if (!saleDoc.exists()) throw new Error('Продажа не найдена');
 
-    const oldSale = saleDoc.data() as IIncome
-    const newStatus = saleData.status || oldSale.status
-    const newProducts = saleData.products || oldSale.products || []
+    const oldSale = saleDoc.data() as IIncome;
+    const newStatus = saleData.status || oldSale.status;
+    const newProducts = saleData.products || oldSale.products || [];
 
     // Получаем данные пользователя
-    const userDoc = await getDoc(doc(db, 'users', user.uid))
-    const userData = userDoc.data()
+    const userDoc = await getDoc(doc(db, 'users', user.uid));
+    const userData = userDoc.data();
     const userName = userData
       ? `${userData.firstName || ''} ${userData.lastName || ''}`.trim()
-      : 'Неизвестный'
+      : 'Неизвестный';
 
     // Обновляем данные
     const updatedSale = {
@@ -152,55 +164,52 @@ export const useSalesStore = defineStore('sales', () => {
       lastEditedBy: user.uid,
       lastEditedByName: userName,
       lastEditedDate: Timestamp.now(),
-    }
+    };
 
     // Используем транзакцию
-    const batch = writeBatch(db)
-    batch.set(saleRef, updatedSale, { merge: true })
+    const batch = writeBatch(db);
+    batch.set(saleRef, updatedSale, { merge: true });
 
-    // Обработка изменений продуктов
-    if (oldSale.products && newProducts) {
-      // 1. Возвращаем старые продукты на склад (если статус не был "отменена")
-      if (oldSale.status !== 'canceled') {
+    // Обработка изменения статуса
+    if (oldSale.status !== newStatus) {
+      console.log(`Status changed from ${oldSale.status} to ${newStatus}`);
+
+      // Если меняем на canceled - возвращаем товары
+      if (newStatus === 'canceled' && oldSale.status !== 'canceled') {
+        console.log('Adding products back to stock');
         await updateProductStocks(
           oldSale.products.map(p => ({ id: p.id, quantity: p.quantity || 1 })),
           'add'
-        )
+        );
       }
-
-      // 2. Вычитаем новые продукты (если новый статус не "отменена")
-      if (newStatus !== 'canceled') {
+      // Если меняем с canceled - вычитаем товары
+      else if (oldSale.status === 'canceled' && newStatus !== 'canceled') {
+        console.log('Removing products from stock');
         await updateProductStocks(
           newProducts.map(p => ({ id: p.id, quantity: p.quantity || 1 })),
           'remove'
-        )
+        );
       }
     }
 
-    // Обработка изменения статуса
-    if (saleData.status && saleData.status !== oldSale.status) {
-      // Обновляем статистику пользователя
+    // Обновляем статистику пользователя
+    if (oldSale.status !== newStatus) {
       batch.set(doc(db, 'users', oldSale.createdBy), {
         stats: {
-          [oldSale.status === 'open' ? 'openSales' : 'closedSales']: increment(-1)
-        }
-      }, { merge: true })
-
-      batch.set(doc(db, 'users', user.uid), {
-        stats: {
+          [oldSale.status === 'open' ? 'openSales' : 'closedSales']: increment(-1),
           [newStatus === 'open' ? 'openSales' : 'closedSales']: increment(1)
         }
-      }, { merge: true })
+      }, { merge: true });
     }
 
-    await batch.commit()
-    await fetchAllSales()
-    return updatedSale
+    await batch.commit();
+    await fetchAllSales();
+    return updatedSale;
   } catch (err) {
-    console.error(err)
-    throw err
+    console.error(err);
+    throw err;
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
@@ -220,18 +229,22 @@ export const useSalesStore = defineStore('sales', () => {
       // Возвращаем товары если сделка была открыта
       if (saleData.status === 'open' && saleData.products) {
         await updateProductStocks(
-          saleData.products.map(p => ({ id: p.id, quantity: p.quantity || 1 })),
-          'add'
+          saleData.products.map((p) => ({ id: p.id, quantity: p.quantity || 1 })),
+          'add',
         )
       }
 
       // Обновляем статистику
-      batch.set(doc(db, 'users', saleData.createdBy), {
-        stats: {
-          totalSales: increment(-1),
-          [saleData.status === 'open' ? 'openSales' : 'closedSales']: increment(-1)
-        }
-      }, { merge: true })
+      batch.set(
+        doc(db, 'users', saleData.createdBy),
+        {
+          stats: {
+            totalSales: increment(-1),
+            [saleData.status === 'open' ? 'openSales' : 'closedSales']: increment(-1),
+          },
+        },
+        { merge: true },
+      )
 
       await batch.commit()
       await fetchAllSales()
@@ -251,6 +264,6 @@ export const useSalesStore = defineStore('sales', () => {
     addSale,
     deleteSale,
     updateSale,
-    updateProductStocks
+    updateProductStocks,
   }
 })
