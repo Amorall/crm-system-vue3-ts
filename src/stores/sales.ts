@@ -104,18 +104,6 @@ export const useSalesStore = defineStore('sales', () => {
       const batch = writeBatch(db)
       batch.set(doc(db, 'incomes', saleId), newSale)
 
-      // Обновляем статистику
-      batch.set(
-        doc(db, 'users', user.uid),
-        {
-          stats: {
-            totalSales: increment(1),
-            [newSale.status === 'open' ? 'openSales' : 'closedSales']: increment(1),
-          },
-        },
-        { merge: true },
-      )
-
       // Вычитаем товары (если статус не "отменена")
       if (newSale.status !== 'canceled' && newSale.products) {
         await updateProductStocks(
@@ -192,16 +180,6 @@ export const useSalesStore = defineStore('sales', () => {
       }
     }
 
-    // Обновляем статистику пользователя
-    if (oldSale.status !== newStatus) {
-      batch.set(doc(db, 'users', oldSale.createdBy), {
-        stats: {
-          [oldSale.status === 'open' ? 'openSales' : 'closedSales']: increment(-1),
-          [newStatus === 'open' ? 'openSales' : 'closedSales']: increment(1)
-        }
-      }, { merge: true });
-    }
-
     await batch.commit();
     await fetchAllSales();
     return updatedSale;
@@ -233,18 +211,6 @@ export const useSalesStore = defineStore('sales', () => {
           'add',
         )
       }
-
-      // Обновляем статистику
-      batch.set(
-        doc(db, 'users', saleData.createdBy),
-        {
-          stats: {
-            totalSales: increment(-1),
-            [saleData.status === 'open' ? 'openSales' : 'closedSales']: increment(-1),
-          },
-        },
-        { merge: true },
-      )
 
       await batch.commit()
       await fetchAllSales()

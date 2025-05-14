@@ -3,16 +3,16 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { useCatalogStore } from '@/stores/catalog';
 import { useAuthStore } from '@/stores/auth';
 import { useConfirm } from 'primevue/useconfirm';
+import { useToast } from 'primevue/usetoast';
+import { uploadToCloudinaryClient } from '@/utils/cloudinaryUploader';
 import type { IProduct } from '@/utils/interfaces';
 
-import InputNumber from 'primevue/inputnumber';
-import SelectButton from 'primevue/selectbutton';
 import ProgressBar from 'primevue/progressbar';
-
 
 const catalogStore = useCatalogStore();
 const authStore = useAuthStore();
 const confirm = useConfirm();
+const toast = useToast();
 
 const { addProduct, updateProduct, deleteProduct } = catalogStore;
 
@@ -22,18 +22,28 @@ const error = ref('');
 const showAddDialog = ref(false);
 const editingProduct = ref<IProduct | null>(null);
 const saving = ref(false);
+const uploadingImage = ref(false);
+const searchQuery = ref('');
+const selectedFile = ref<File | null>(null);
 
 const sortKey = ref();
 const sortOrder = ref();
 const sortField = ref();
 const selectedCategory = ref<string | null>(null);
+const selectedStockStatus = ref<string | null>(null);
 const newCategory = ref('');
+const fileUploadRef = ref();
 
 const sortOptions = ref([
   {label: 'Цена по убыванию', value: '!price'},
   {label: 'Цена по возрастанию', value: 'price'},
 ]);
 
+const stockStatusOptions = ref([
+  { label: 'Много', value: 'many' },
+  { label: 'Мало', value: 'few' },
+  { label: 'Закончилось', value: 'none' }
+]);
 
 const productForm = ref({
   name: '',
@@ -41,8 +51,110 @@ const productForm = ref({
   price: 0,
   stock: 0,
   category: '',
-  features: [] as string[],
+  imageUrl: '', 
+})
+
+const errors = ref({
+  name: '',
+  description: '',
+  price: '',
+  stock: '',
+  category: '',
 });
+
+const validateForm = () => {
+  let isValid = true;
+  errors.value = {
+    name: '',
+    description: '',
+    price: '',
+    stock: '',
+    category: '',
+  };
+// Проверка названия
+  if (!productForm.value.name.trim()) {
+    errors.value.name = 'Название обязательно';
+    isValid = false;
+  } else if (products.value.some(p => 
+    p.name.toLowerCase() === productForm.value.name.toLowerCase() && 
+    (!editingProduct.value || p.id !== editingProduct.value.id)
+  )) {
+    errors.value.name = 'Товар с таким названием уже существует';
+    isValid = false;
+    toast.add({
+      severity: 'warn',
+      summary: 'Предупреждение',
+      detail: 'Товар с таким названием уже существует',
+      life: 3000
+    });
+  }
+
+  // Проверка описания
+  if (!productForm.value.description.trim()) {
+    errors.value.description = 'Описание обязательно';
+    isValid = false;
+  } else if (productForm.value.description.length > 500) {
+    errors.value.description = 'Описание не должно превышать 500 символов';
+    isValid = false;
+  }
+
+  // Проверка цены
+  if (productForm.value.price <= 0) {
+    errors.value.price = 'Цена должна быть больше 0';
+    isValid = false;
+  }
+
+  // Проверка количества
+  if (productForm.value.stock < 0) {
+    errors.value.stock = 'Количество не может быть отрицательным';
+    isValid = false;
+  }
+
+  // Проверка категории
+  if (!productForm.value.category?.trim()) {
+    errors.value.category = 'Категория обязательна';
+    isValid = false;
+  }
+
+  return isValid;
+};
+
+const onFileSelect = (event: { files: File[] }) => {
+  selectedFile.value = event.files[0];
+};
+
+const onFileClear = () => {
+  selectedFile.value = null;
+};
+
+const uploadImage = async () => {
+  if (!selectedFile.value) return;
+
+  uploadingImage.value = true;
+  try {
+    productForm.value.imageUrl = await uploadToCloudinaryClient(selectedFile.value);
+    toast.add({
+      severity: 'success',
+      summary: 'Успех',
+      detail: 'Изображение загружено',
+      life: 3000
+    });
+    onFileClear();
+  } catch (error) {
+    toast.add({
+      severity: 'error',
+      summary: 'Ошибка',
+      detail: error.message || 'Не удалось загрузить изображение',
+      life: 3000
+    });
+  } finally {
+    uploadingImage.value = false;
+  }
+};
+
+const removeImage = () => {
+  productForm.value.imageUrl = ''
+}
 
 const hasAdminAccess = computed(() => {
   return authStore.userInfo?.permission && authStore.userInfo.permission >= 2;
@@ -54,13 +166,33 @@ const categories = computed(() => {
   return Array.from(cats);
 });
 
-// Фильтруем продукты по выбранной категории
+// Фильтруем продукты по выбранной категории и наличию
 const filteredProducts = computed(() => {
   let result = [...products.value];
   
   // Фильтрация по категории
   if (selectedCategory.value) {
     result = result.filter(p => p.category === selectedCategory.value);
+  }
+  
+  // Фильтрация по наличию
+  if (selectedStockStatus.value) {
+    if (selectedStockStatus.value === 'many') {
+      result = result.filter(p => p.stock > 10);
+    } else if (selectedStockStatus.value === 'few') {
+      result = result.filter(p => p.stock > 0 && p.stock <= 10);
+    } else if (selectedStockStatus.value === 'none') {
+      result = result.filter(p => p.stock === 0);
+    }
+  }
+  
+  // Поиск по названию и описанию
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase();
+    result = result.filter(p => 
+      p.name.toLowerCase().includes(query) || 
+      p.description.toLowerCase().includes(query)
+    );
   }
   
   // Сортировка
@@ -74,6 +206,7 @@ const filteredProducts = computed(() => {
   
   return result;
 });
+
 
 // Обработчик изменения сортировки
 const onSortChange = (event: { value: { value: any; }; }) => {
@@ -95,10 +228,22 @@ const addNewCategory = () => {
     if (!categories.value.includes(newCategory.value.trim())) {
       productForm.value.category = newCategory.value.trim();
       newCategory.value = '';
+      toast.add({
+        severity: 'success',
+        summary: 'Успешно',
+        detail: 'Новая категория добавлена',
+        life: 3000
+      });
+    } else {
+      toast.add({
+        severity: 'warn',
+        summary: 'Предупреждение',
+        detail: 'Такая категория уже существует',
+        life: 3000
+      });
     }
   }
 };
-
 
 // Загрузка продуктов
 const loadProducts = async () => {
@@ -135,7 +280,7 @@ const editProduct = (product: IProduct) => {
     price: product.price,
     stock: product.stock,
     category: product.category,
-    features: [...product.features],
+    imageUrl: product.imageUrl || '', 
   };
   showAddDialog.value = true;
 };
@@ -152,32 +297,64 @@ const resetForm = () => {
     description: '',
     price: 0,
     stock: 0,
-    category: 'software',
-    features: [],
+    category: '',
+    imageUrl: '',
   };
   newCategory.value = '';
 };
 
 const saveProduct = async () => {
+  if (!validateForm()) return;
+  // Проверяем, что изображение загружено (если это новый товар)
+  if (!editingProduct.value && !productForm.value.imageUrl) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Внимание',
+      detail: 'Загрузите изображение товара',
+      life: 3000
+    });
+    return;
+  }
+
   saving.value = true;
   try {
     const productData = {
       ...productForm.value,
+      imageUrl: productForm.value.imageUrl,
       updatedAt: new Date(),
     };
 
     if (editingProduct.value) {
       await updateProduct(editingProduct.value.id, productData);
+      toast.add({
+        severity: 'success',
+        summary: 'Успешно',
+        detail: 'Продукт успешно обновлен',
+        life: 3000
+      });
     } else {
       await addProduct({
         ...productData,
         createdAt: new Date(),
       });
+      toast.add({
+        severity: 'success',
+        summary: 'Успешно',
+        detail: 'Продукт успешно добавлен',
+        life: 3000
+      });
     }
     closeDialog();
   } catch (err) {
     console.error('Ошибка сохранения продукта:', err);
+    toast.add({
+      severity: 'error',
+      summary: 'Ошибка',
+      detail: 'Не удалось сохранить продукт',
+      life: 3000
+    });
   } finally {
+    console.log('Saving product with image:', productForm.value.imageUrl);
     saving.value = false;
   }
 };
@@ -187,21 +364,43 @@ const handleDelete = async (id: string) => {
     message: 'Вы уверены, что хотите удалить этот продукт?',
     header: 'Подтверждение удаления',
     icon: 'pi pi-exclamation-triangle',
+    rejectLabel: 'Отмена',
+    acceptLabel: 'Удалить',
+    rejectClass: 'p-button-secondary p-button-outlined',
+    acceptClass: 'p-button-danger',
     accept: async () => {
       try {
         await deleteProduct(id);
+        toast.add({
+          severity: 'success',
+          summary: 'Успешно',
+          detail: 'Продукт успешно удален',
+          life: 3000
+        });
       } catch (err) {
         console.error('Ошибка удаления продукта:', err);
+        toast.add({
+          severity: 'error',
+          summary: 'Ошибка',
+          detail: 'Не удалось удалить продукт',
+          life: 3000
+        });
       }
     },
     reject: () => {}
   });
 };
 
-const getSeverity = (product: IProduct) => {
-  if (product.stock > 10) return 'success';
-  if (product.stock > 0) return 'warning';
-  return 'danger';
+const getStockStatus = (stock: number) => {
+  if (stock > 10) return { label: 'Много', severity: 'success' };
+  if (stock > 0) return { label: 'Мало', severity: 'warning' };
+  return { label: 'Закончилось', severity: 'danger' };
+};
+
+const resetFilters = () => {
+  selectedCategory.value = null;
+  selectedStockStatus.value = null;
+  searchQuery.value = '';
 };
 </script>
 
@@ -213,14 +412,15 @@ const getSeverity = (product: IProduct) => {
       <h1 class="text-2xl font-bold">Каталог средств защиты информации</h1>
       <app-button 
         v-if="hasAdminAccess"
-        icon="pi pi-plus" 
-        label="Добавить продукт"
         @click="showAddDialog = true"
         :disabled="loading"
-      />
+      >
+        <i class="pi pi-plus" />
+        <span class="w-[206px] hidden md:block">Добавить продукт</span>
+       </app-button>
     </div>
 
-     <ProgressBar 
+    <ProgressBar 
       v-if="loading" 
       mode="indeterminate" 
       class="h-1 mb-4"
@@ -228,31 +428,81 @@ const getSeverity = (product: IProduct) => {
     />
     <app-message v-if="error" severity="error" class="mb-4">{{ error }}</app-message>
 
-    <div class="flex flex-wrap gap-4 mb-6">
-      <div class="flex items-center gap-2">
-        <span class="font-medium">Категория:</span>
-        <app-select 
-          v-model="selectedCategory" 
-          :options="categories" 
-          placeholder="Все категории"
-          class="min-w-[200px]"
-        >
-          <template #option="slotProps">
-            <span class="capitalize">{{ slotProps.option }}</span>
-          </template>
-        </app-select>
+ <div class="mb-6">
+      <!-- Main Filters Row -->
+      <div class="flex flex-col md:flex-row gap-4 mb-4">
+        <div class="flex-1 flex flex-col sm:flex-row gap-4">
+          <div class="flex-1">
+            <label class="block text-sm font-medium text-gray-500 mb-1">Категория</label>
+            <app-select 
+              v-model="selectedCategory" 
+              :options="categories" 
+              placeholder="Все категории"
+              class="w-full"
+            >
+              <template #option="slotProps">
+                <span class="capitalize">{{ slotProps.option }}</span>
+              </template>
+            </app-select>
+          </div>
+          <div class="flex-1">
+            <label class="block text-sm font-medium text-gray-500 mb-1">Наличие</label>
+            <app-select 
+              v-model="selectedStockStatus" 
+              :options="stockStatusOptions" 
+              optionLabel="label"
+              optionValue="value"
+              placeholder="Любое"
+              class="w-full"
+            />
+          </div>
+          
+          <div class="flex items-end">
+            <app-button 
+              icon="pi pi-filter-slash" 
+              severity="secondary"
+              @click="resetFilters"
+              v-tooltip="'Сбросить все фильтры'"
+              class="h-[42px]"
+            />
+          </div>
+        </div>
+        
+        <div class="w-full md:w-64">
+            <label class="block text-sm font-medium text-gray-500 mb-1">Поиск товаров</label>
+            <app-inputgroup>
+            <app-inputgroupaddon>
+                <i class="pi pi-search"></i>
+            </app-inputgroupaddon>
+            <app-inputtext 
+                v-model="searchQuery" 
+                placeholder="Поиск..." 
+                class="w-full"
+            />
+            </app-inputgroup>
+        </div>
       </div>
       
-      <div class="flex items-center gap-2">
-        <span class="font-medium">Сортировка:</span>
-        <app-select 
+      <!-- Sorting Row -->
+      <div class="flex-1">
+        <label class="block text-sm font-medium text-gray-500 mb-1">Сортировка:</label>
+        <app-selectbutton 
           v-model="sortKey" 
           :options="sortOptions" 
-          optionLabel="label" 
-          placeholder="Сортировать по..."
+          optionLabel="label"
           @change="onSortChange"
-          class="min-w-[200px]"
-        />
+          class="border-none"
+        >
+          <template #option="slotProps">
+            <div class="flex items-center gap-2">
+              <i 
+                class="pi" 
+                :class="slotProps.option.value === 'price' ? 'pi-sort-amount-up' : 'pi-sort-amount-down'"
+              ></i>
+              <span>{{ slotProps.option.label }}</span>
+            </div>
+          </template>
+        </app-selectbutton>
       </div>
     </div>
 
@@ -288,7 +538,7 @@ const getSeverity = (product: IProduct) => {
                   <i class="pi pi-image text-4xl text-surface-400"></i>
                 </div>
                 <div class="absolute bg-black/70 rounded" style="left: 4px; top: 4px">
-                  <app-tag :value="`${item.stock} шт`" :severity="getSeverity(item)"></app-tag>
+                  <app-tag :value="`${item.stock} шт`" :severity="getStockStatus(item.stock).severity"></app-tag>
                 </div>
               </div>
               <div class="flex flex-col md:flex-row justify-between md:items-center flex-1 gap-6">
@@ -298,33 +548,30 @@ const getSeverity = (product: IProduct) => {
                     <div class="text-lg font-medium mt-2">{{ item.name }}</div>
                     <p class="text-surface-600 mt-2">{{ item.description }}</p>
                   </div>
-                  <div class="bg-surface-100 p-1" style="border-radius: 30px">
-                    <div class="bg-surface-0 flex items-center gap-2 justify-center py-1 px-2" style="border-radius: 30px; box-shadow: 0px 1px 2px 0px rgba(0, 0, 0, 0.04), 0px 1px 2px 0px rgba(0, 0, 0, 0.06)">
-                      <span class="text-surface-900 font-medium text-sm">{{ item.price }}</span>
-                      <i class="pi pi-ruble-sign text-surface-900"></i>
-                    </div>
-                  </div>
+                  <app-tag 
+                    :value="getStockStatus(item.stock).label" 
+                    :severity="getStockStatus(item.stock).severity"
+                    class="mt-2"
+                  />
                 </div>
                 <div class="flex flex-col md:items-end gap-8">
                   <span class="text-xl font-semibold">{{ item.price }} ₽</span>
                   <div class="flex flex-row-reverse md:flex-row gap-2">
                     <app-button 
-                      icon="pi pi-shopping-cart" 
-                      label="В корзину" 
-                      :disabled="item.stock === 0" 
+                      v-if="hasAdminAccess"
+                      icon="pi pi-pencil" 
+                      label="Редактировать"
+                      severity="info"
+                      @click="editProduct(item)"
                       class="flex-auto md:flex-initial whitespace-nowrap"
                     />
                     <app-button 
                       v-if="hasAdminAccess"
-                      icon="pi pi-pencil" 
-                      severity="secondary"
-                      @click="editProduct(item)"
-                    />
-                    <app-button 
-                      v-if="hasAdminAccess"
                       icon="pi pi-trash" 
+                      label="Удалить"
                       severity="danger"
                       @click="handleDelete(item.id)"
+                      class="flex-auto md:flex-initial whitespace-nowrap"
                     />
                   </div>
                 </div>
@@ -341,59 +588,159 @@ const getSeverity = (product: IProduct) => {
       :header="editingProduct ? 'Редактировать продукт' : 'Добавить продукт'"
       modal 
       class="w-full max-w-2xl"
+       @update:visible="(val: any) => { 
+    if (!val) closeDialog(); 
+  }"
     >
       <div class="grid grid-cols-1 gap-4">
+      <!-- Поле для загрузки изображения -->
+    <div class="field">
+    <label class="block mb-2 font-medium">Изображение товара</label>
+    
+    <div v-if="productForm.imageUrl" class="mb-4 relative group">
+      <img 
+        :src="productForm.imageUrl" 
+        class="w-full h-48 object-cover rounded-lg border border-gray-200"
+        alt="Превью"
+      />
+      <button
+        @click="removeImage"
+        class="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full opacity-90 hover:opacity-100"
+      >
+        <i class="pi pi-trash text-xs"></i>
+      </button>
+    </div>
+    
+    <div class="border-2 border-dashed border-gray-300 rounded-lg p-4">
+      <app-fileupload
+        ref="fileUploadRef"
+        mode="basic"
+        name="productImage"
+        accept="image/*"
+        :maxFileSize="1000000"
+        :multiple="false"
+        :auto="false"
+        chooseLabel="Выбрать файл"
+        @select="onFileSelect"
+      >
+        <template #empty>
+          <div class="flex flex-col items-center justify-center py-6">
+            <i class="pi pi-cloud-upload text-4xl text-gray-400 mb-2"></i>
+            <p class="text-gray-500">Перетащите изображение сюда</p>
+            <p class="text-sm text-gray-400 mt-1">или</p>
+            <span class="text-primary-500 font-medium">выберите файл</span>
+          </div>
+        </template>
+      </app-fileupload>
+
+      <div v-if="selectedFile" class="mt-3 flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
+        <i class="pi pi-image text-xl text-primary-500"></i>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-medium truncate">{{ selectedFile.name }}</p>
+          <p class="text-xs text-gray-500">{{ (selectedFile.size / 1024).toFixed(1) }} KB</p>
+        </div>
+        <button @click="onFileClear" class="text-red-500 hover:text-red-700">
+          <i class="pi pi-times"></i>
+        </button>
+      </div>
+
+      <app-button
+        v-if="selectedFile"
+        label="Загрузить"
+        icon="pi pi-cloud-upload"
+        @click="uploadImage"
+        :loading="uploadingImage"
+        class="w-full mt-3"
+      />
+      
+      <small class="text-xs text-gray-500 block mt-2">
+        Поддерживаются JPG, PNG. Максимальный размер: 1MB
+      </small>
+    </div>
+  </div>
+
+       <div class="field">
+        <label for="name" class="block mb-2 font-medium">Название <span class="text-red-500">*</span></label>
+        <app-inputtext 
+          id="name" 
+          v-model="productForm.name" 
+          class="w-full" 
+          :class="{ 'p-invalid': errors.name }"
+        />
+        <small v-if="errors.name" class="p-error">{{ errors.name }}</small>
+      </div>
+   
+      <div class="field">
+        <label for="description" class="block mb-2 font-medium">Описание <span class="text-red-500">*</span></label>
+        <app-textarea 
+          id="description" 
+          v-model="productForm.description" 
+          rows="3" 
+          class="w-full" 
+          :class="{ 'p-invalid': errors.description }"
+        />
+        <div class="flex justify-between">
+          <small v-if="errors.description" class="p-error">{{ errors.description }}</small>
+          <small :class="{ 'text-red-500': productForm.description.length > 500 }">
+            {{ productForm.description.length }}/500
+          </small>
+        </div>
+      </div>
+      
+      <!-- Поля цены и количества -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="field">
-          <label for="name" class="block mb-2 font-medium">Название</label>
-          <app-inputtext id="name" v-model="productForm.name" class="w-full" />
+          <label for="price" class="block mb-2 font-medium">Цена <span class="text-red-500">*</span></label>
+          <app-inputnumber 
+            id="price" 
+            v-model="productForm.price" 
+            mode="currency" 
+            currency="RUB" 
+            locale="ru-RU" 
+            class="w-full" 
+            :class="{ 'p-invalid': errors.price }"
+          />
+          <small v-if="errors.price" class="p-error">{{ errors.price }}</small>
         </div>
         
         <div class="field">
-          <label for="description" class="block mb-2 font-medium">Описание</label>
-          <app-textarea id="description" v-model="productForm.description" rows="3" class="w-full" />
+          <label for="stock" class="block mb-2 font-medium">Остаток на складе <span class="text-red-500">*</span></label>
+          <app-inputnumber 
+            id="stock" 
+            v-model="productForm.stock" 
+            class="w-full" 
+            :class="{ 'p-invalid': errors.stock }"
+          />
+          <small v-if="errors.stock" class="p-error">{{ errors.stock }}</small>
         </div>
-        
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="field">
-            <label for="price" class="block mb-2 font-medium">Цена</label>
-            <InputNumber 
-              id="price" 
-              v-model="productForm.price" 
-              mode="currency" 
-              currency="RUB" 
-              locale="ru-RU" 
-              class="w-full"
-            />
-          </div>
-          
-          <div class="field">
-            <label for="stock" class="block mb-2 font-medium">Остаток на складе</label>
-            <InputNumber id="stock" v-model="productForm.stock" class="w-full" />
-          </div>
+      </div>
+      
+      <!-- Поле категории -->
+      <div class="field">
+        <label class="block mb-2 font-medium">Категория <span class="text-red-500">*</span></label>
+        <div class="flex gap-2">
+          <app-selectbutton 
+            v-model="productForm.category" 
+            :options="categories" 
+            optionLabel=""
+            class="flex-1"
+            :class="{ 'p-invalid': errors.category }"
+          >
+            <template #option="slotProps">
+              <span class="capitalize">{{ slotProps.option }}</span>
+            </template>
+          </app-selectbutton>
+          <app-button
+            v-if="!categories.includes(productForm.category) || productForm.category === ''"
+            icon="pi pi-plus" 
+            severity="secondary"
+            @click="addNewCategory"
+            v-tooltip="'Добавить новую категорию'"
+          />
         </div>
+        <small v-if="errors.category" class="p-error">{{ errors.category }}</small>
         
-         <div class="field">
-          <label class="block mb-2 font-medium">Категория</label>
-          <div class="flex gap-2">
-            <SelectButton 
-              v-model="productForm.category" 
-              :options="categories" 
-              optionLabel=""
-              class="flex-1"
-            >
-              <template #option="slotProps">
-                <span class="capitalize">{{ slotProps.option }}</span>
-              </template>
-            </SelectButton>
-            <app-button
-              icon="pi pi-plus" 
-              severity="secondary"
-              @click="addNewCategory"
-              v-tooltip="'Добавить новую категорию'"
-            />
-          </div>
-          
-           <div v-if="!categories.includes(productForm.category) || productForm.category === ''" class="mt-2">
+        <div v-if="!categories.includes(productForm.category) || productForm.category === ''" class="mt-2">
           <app-inputtext
             v-model="newCategory"
             placeholder="Введите новую категорию"
@@ -403,21 +750,42 @@ const getSeverity = (product: IProduct) => {
         </div>
       </div>
     </div>
-      
-      <template #footer>
-        <app-button 
-          label="Отмена" 
-          icon="pi pi-times" 
-          @click="closeDialog" 
-          severity="secondary"
-        />
-        <app-button 
-          :label="editingProduct ? 'Обновить' : 'Добавить'" 
-          icon="pi pi-check" 
-          @click="saveProduct"
-          :loading="saving"
-        />
-      </template>
+    
+    <template #footer>
+      <app-button 
+        label="Отмена" 
+        icon="pi pi-times" 
+        @click="closeDialog" 
+        severity="secondary"
+      />
+      <app-button 
+        :label="editingProduct ? 'Обновить' : 'Добавить'" 
+        icon="pi pi-check" 
+        @click="saveProduct"
+        :loading="saving"
+      />
+    </template>
     </app-dialog>
   </div>
 </template>
+
+<style scoped>
+:deep(.p-selectbutton .p-button) {
+  border-radius: 6px !important;
+  padding: 0.5rem 1rem;
+}
+
+:deep(.p-selectbutton .p-button:not(:first-of-type)) {
+  border-left: 1px solid var(--surface-border);
+}
+
+@media (max-width: 640px) {
+  :deep(.p-fileupload-choose) {
+    padding: 0.5rem;
+  }
+  
+  :deep(.p-button-label) {
+    font-size: 0.875rem;
+  }
+}
+</style>

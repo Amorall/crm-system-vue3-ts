@@ -18,11 +18,6 @@ interface UserInfo {
   jobPosition?: string | null
   gender?: string | null
   permission?: number | null
-  stats?: {
-    totalSales: number
-    openSales: number
-    closedSales: number
-  }
   status?: 'working' | 'vacation' | 'sick_leave'
   lastLogin?: Date | Timestamp | { seconds: number; nanoseconds?: number } | null;
   loginCount?: number
@@ -73,7 +68,6 @@ export const useAuthStore = defineStore('auth', () => {
           middleName: payload.middleName,
           jobPosition: payload.jobPosition,
           gender: payload.gender,
-          incomeValue: '0',
           permission: permission,
         })
 
@@ -104,14 +98,14 @@ export const useAuthStore = defineStore('auth', () => {
         case 'auth/email-already-in-use':
           error.value = 'Этот email уже зарегистрирован'
           break
-        case 'auth/invalid-credentials':
+        case 'auth/invalid-credential':
           error.value = 'Неверный email или пароль'
           break
         case 'auth/user-disabled':
           error.value = 'Пользователь заблокирован'
           break
         default:
-          error.value = err
+          error.value = 'Произошла неизвестная ошибка. Попробуйте еще раз позже'
           break
       }
       throw new Error(error.value)

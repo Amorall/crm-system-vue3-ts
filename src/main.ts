@@ -32,6 +32,10 @@ import DataView from 'primevue/dataview';
 import Textarea from 'primevue/textarea';
 import MultiSelect from 'primevue/multiselect';
 import InputNumber from 'primevue/inputnumber';
+import SelectButton from 'primevue/selectbutton';
+import InputGroup from 'primevue/inputgroup';
+import InputGroupAddon from 'primevue/inputgroupaddon';
+import FileUpload from 'primevue/fileupload';
 import Tooltip from 'primevue/tooltip';
 
 import App from './App.vue'
@@ -108,6 +112,10 @@ app.component('app-dataview', DataView)
 app.component('app-textarea', Textarea)
 app.component('app-multiselect', MultiSelect)
 app.component('app-inputnumber', InputNumber)
+app.component('app-selectbutton', SelectButton)
+app.component('app-inputgroup', InputGroup)
+app.component('app-inputgroupaddon', InputGroupAddon)
+app.component('app-fileupload', FileUpload)
 
 app.directive('tooltip', Tooltip);
 

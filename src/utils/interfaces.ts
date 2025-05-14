@@ -16,7 +16,6 @@ export interface IIncome {
   clientEmail?: string
   clientWhApp?: string
   clientTg?: string
-  price: string
   status: string
   createdDate: Date | Timestamp
   createdBy?: string
@@ -46,8 +45,7 @@ export interface IProduct {
   price: number;
   stock: number;
   category: string;
-  features: string[];
-  imageUrl?: string;
+  imageUrl?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

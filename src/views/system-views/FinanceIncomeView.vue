@@ -31,9 +31,9 @@ const productsDialogVisible = ref<boolean>(false)
 const currentProducts = ref<Array<{ id: string, name: string, quantity: number }>>([])
 const currentTotalPrice = ref<number>(0)
 const statusOptions = [
-  { value: 'open', label: 'Открыта', severity: 'success' },
-  { value: 'closed', label: 'Закрыта', severity: 'danger' },
-  { value: 'canceled', label: 'Отменена', severity: 'secondary' }
+  { value: 'open', label: 'Открыто', severity: 'success' },
+  { value: 'closed', label: 'Закрыто', severity: 'danger' },
+  { value: 'canceled', label: 'Отменено', severity: 'secondary' }
 ]
 
 // Флаги touched для валидации
@@ -458,7 +458,6 @@ const saveSale = async () => {
         ...saleData,
         createdBy: user.uid,
         createdByName: userName || 'Неизвестный',
-        price: "",
       })
       toast.add({
         severity: 'success',
@@ -696,15 +695,15 @@ onMounted(async () => {
               <div class="flex gap-4">
                 <div class="flex items-center">
                   <app-radiobutton v-model="status" inputId="status-open" value="open" />
-                  <label for="status-open" class="ml-2">Открыта</label>
+                  <label for="status-open" class="ml-2">Открыто</label>
                 </div>
                 <div class="flex items-center">
                   <app-radiobutton v-model="status" inputId="status-closed" value="closed" />
-                  <label for="status-closed" class="ml-2">Закрыта</label>
+                  <label for="status-closed" class="ml-2">Закрыто</label>
                 </div>
                 <div class="flex items-center">
                   <app-radiobutton v-model="status" inputId="status-canceled" value="canceled" />
-                  <label for="status-canceled" class="ml-2">Отменена</label>
+                  <label for="status-canceled" class="ml-2">Отменено</label>
                 </div>
               </div>
               <div class="text-sm text-gray-500 mt-4">
@@ -789,7 +788,7 @@ onMounted(async () => {
               </template>
             </app-column>
             <app-column field="createdByName" header="Сотрудник" class="p-3"></app-column>
-            <app-column field="createdDate" header="Дата" class="p-3">
+            <app-column field="createdDate" header="Дата" sortable class="p-3">
               <template #body="{ data }">
                 {{ formatFirestoreDate(data.createdDate) }}
               </template>
