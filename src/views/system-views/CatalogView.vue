@@ -49,6 +49,7 @@ const productForm = ref({
   name: '',
   description: '',
   price: 0,
+  purchasePrice: 0,
   stock: 0,
   category: '',
   imageUrl: '', 
@@ -58,6 +59,7 @@ const errors = ref({
   name: '',
   description: '',
   price: '',
+  purchasePrice: '',
   stock: '',
   category: '',
 });
@@ -68,6 +70,7 @@ const validateForm = () => {
     name: '',
     description: '',
     price: '',
+    purchasePrice: '',
     stock: '',
     category: '',
   };
@@ -99,6 +102,11 @@ const validateForm = () => {
   }
 
   // Проверка цены
+  if (productForm.value.purchasePrice <= 0) {
+    errors.value.purchasePrice = 'Закупочная цена должна быть больше 0';
+    isValid = false;
+  }
+
   if (productForm.value.price <= 0) {
     errors.value.price = 'Цена должна быть больше 0';
     isValid = false;
@@ -278,6 +286,7 @@ const editProduct = (product: IProduct) => {
     name: product.name,
     description: product.description,
     price: product.price,
+    purchasePrice: product.purchasePrice,
     stock: product.stock,
     category: product.category,
     imageUrl: product.imageUrl || '', 
@@ -296,6 +305,7 @@ const resetForm = () => {
     name: '',
     description: '',
     price: 0,
+    purchasePrice: 0,
     stock: 0,
     category: '',
     imageUrl: '',
@@ -667,7 +677,7 @@ const resetFilters = () => {
           class="w-full" 
           :class="{ 'p-invalid': errors.name }"
         />
-        <small v-if="errors.name" class="p-error">{{ errors.name }}</small>
+        <small v-if="errors.name" class="p-error text-red-500">{{ errors.name }}</small>
       </div>
    
       <div class="field">
@@ -680,7 +690,7 @@ const resetFilters = () => {
           :class="{ 'p-invalid': errors.description }"
         />
         <div class="flex justify-between">
-          <small v-if="errors.description" class="p-error">{{ errors.description }}</small>
+          <small v-if="errors.description" class="p-error text-red-500">{{ errors.description }}</small>
           <small :class="{ 'text-red-500': productForm.description.length > 500 }">
             {{ productForm.description.length }}/500
           </small>
@@ -690,7 +700,7 @@ const resetFilters = () => {
       <!-- Поля цены и количества -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="field">
-          <label for="price" class="block mb-2 font-medium">Цена <span class="text-red-500">*</span></label>
+          <label for="price" class="block mb-2 font-medium">Цена продажи<span class="text-red-500">*</span></label>
           <app-inputnumber 
             id="price" 
             v-model="productForm.price" 
@@ -700,8 +710,21 @@ const resetFilters = () => {
             class="w-full" 
             :class="{ 'p-invalid': errors.price }"
           />
-          <small v-if="errors.price" class="p-error">{{ errors.price }}</small>
+          <small v-if="errors.price" class="p-error text-red-500">{{ errors.price }}</small>
         </div>
+
+          <div class="field">
+            <label for="purchasePrice" class="block mb-2 font-medium">Закупочная цена</label>
+            <app-inputnumber 
+              id="purchasePrice" 
+              v-model="productForm.purchasePrice" 
+              mode="currency" 
+              currency="RUB" 
+              locale="ru-RU" 
+              class="w-full"
+              :min="0"
+            />
+          </div>
         
         <div class="field">
           <label for="stock" class="block mb-2 font-medium">Остаток на складе <span class="text-red-500">*</span></label>
@@ -711,7 +734,7 @@ const resetFilters = () => {
             class="w-full" 
             :class="{ 'p-invalid': errors.stock }"
           />
-          <small v-if="errors.stock" class="p-error">{{ errors.stock }}</small>
+          <small v-if="errors.stock" class="p-error text-red-500">{{ errors.stock }}</small>
         </div>
       </div>
       
@@ -723,8 +746,8 @@ const resetFilters = () => {
             v-model="productForm.category" 
             :options="categories" 
             optionLabel=""
-            class="flex-1"
-            :class="{ 'p-invalid': errors.category }"
+            class="flex-1 border-none"
+            :class="{ 'p-error': errors.category }"
           >
             <template #option="slotProps">
               <span class="capitalize">{{ slotProps.option }}</span>
@@ -738,7 +761,7 @@ const resetFilters = () => {
             v-tooltip="'Добавить новую категорию'"
           />
         </div>
-        <small v-if="errors.category" class="p-error">{{ errors.category }}</small>
+        <small v-if="errors.category" class="p-error text-red-500">{{ errors.category }}</small>
         
         <div v-if="!categories.includes(productForm.category) || productForm.category === ''" class="mt-2">
           <app-inputtext

@@ -15,10 +15,10 @@ import {
   ref as storageRef,
   uploadBytes,
   getDownloadURL,
-  deleteObject,
 } from 'firebase/storage'
 import type { IProduct } from '@/utils/interfaces'
 import { getAuth } from 'firebase/auth'
+import { useExpensesStore } from './expenses'
 
 export const useCatalogStore = defineStore('catalog', () => {
   const products = ref<IProduct[]>([])
@@ -101,6 +101,15 @@ export const useCatalogStore = defineStore('catalog', () => {
 
       await setDoc(doc(db, 'products', id), newProduct)
       products.value = [...products.value, newProduct]
+      if (product.stock > 0 && product.purchasePrice > 0) {
+        const expensesStore = useExpensesStore()
+        await expensesStore.addExpense({
+            amount: product.stock * product.purchasePrice,
+            type: 'product',
+            description: `Закупка нового товара - ${product.name} (${product.stock} шт.)`,
+            productId: id,
+        })
+      }
       console.log('Adding product:', newProduct)
       return newProduct
     } catch (err) {
@@ -119,6 +128,18 @@ export const useCatalogStore = defineStore('catalog', () => {
           await deleteImage(product.imageUrl)
         }
       }
+
+      if (product && typeof updates.stock !== 'undefined' && 
+        updates.stock > product.stock && product.purchasePrice > 0) {
+      const addedStock = updates.stock - product.stock;
+      const expensesStore = useExpensesStore();
+      await expensesStore.addExpense({
+        amount: addedStock * product.purchasePrice,
+        type: 'product',
+        description: `Пополнение склада - ${product.name} (+${addedStock} шт.)`,
+        productId: id,
+      });
+    }
 
       await updateDoc(doc(db, 'products', id), {
         ...updates,

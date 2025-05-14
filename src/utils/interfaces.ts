@@ -1,7 +1,5 @@
 import type { Timestamp } from "firebase/firestore"
 
-export type ExpenseCategory = 'purchase' | 'marketing' | 'salary' | 'other'
-
 export interface IProductInSale {
   id: string;
   name: string;
@@ -26,16 +24,22 @@ export interface IIncome {
 }
 
 export interface IExpense {
-  id: string
-  name: string
-  amount: number
-  category: ExpenseCategory
-  description?: string
-  createdBy: string
-  createdByName: string
-  createdDate: Date | Timestamp
-  lastEditedBy: string
-  lastEditedByName: string
+  id: string;
+  amount: number;
+  description: string;
+  date: Date | Timestamp;
+  createdBy: string;
+  createdByName: string;
+  lastEditedBy?: string;
+  lastEditedByName?: string;
+  lastEditedDate?: Date | Timestamp;
+  type: 'product' | 'marketing' | 'salary' | 'other';
+  productId?: string | null;
+}
+
+export interface IExpenseCategory {
+  value: string;
+  label: string;
 }
 
 export interface IProduct {
@@ -43,6 +47,7 @@ export interface IProduct {
   name: string;
   description: string;
   price: number;
+  purchasePrice: number;
   stock: number;
   category: string;
   imageUrl?: string | null;

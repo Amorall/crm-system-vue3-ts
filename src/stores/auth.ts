@@ -19,9 +19,11 @@ interface UserInfo {
   gender?: string | null
   permission?: number | null
   status?: 'working' | 'vacation' | 'sick_leave'
-  lastLogin?: Date | Timestamp | { seconds: number; nanoseconds?: number } | null;
+  lastLogin?: Date | Timestamp | { seconds: number; nanoseconds?: number } | null
   loginCount?: number
   photoURL?: string
+  canEditStatus?: boolean
+  isAdmin?: boolean;
 }
 
 interface AuthPayload {
@@ -37,7 +39,7 @@ interface AuthPayload {
 const POSITION_PERMISSIONS: Record<string, number> = {
   Менеджер: 1,
   Администратор: 2,
-  Директор: 3
+  Директор: 3,
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -58,7 +60,6 @@ export const useAuthStore = defineStore('auth', () => {
 
       const user = userCredential.user
 
-      // Если это регистрация, сохраняем доп. данные в Firestore
       if (type === 'signup' && payload.firstName) {
         const db = getFirestore()
         const permission = POSITION_PERMISSIONS[payload.jobPosition!] ?? 1
@@ -88,6 +89,7 @@ export const useAuthStore = defineStore('auth', () => {
             email: user.email,
             userId: user.uid,
             ...userDoc.data(),
+            isAdmin: (userDoc.data().permission || 0) >= 3,
           }
         }
       }
@@ -129,28 +131,33 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  const updateUserStatus = async (
+  newStatus: 'working' | 'vacation' | 'sick_leave',
+  userId: string
+) => {
+  try {
+    const auth = getAuth()
+    const currentUser = auth.currentUser
+    if (!currentUser) throw new Error('Пользователь не авторизован')
 
-  const updateUserStatus = async (newStatus: 'working' | 'vacation' | 'sick_leave') => {
-    try {
-      const auth = getAuth()
-      const user = auth.currentUser
-      if (!user) throw new Error('Пользователь не авторизован')
-
-      const db = getFirestore()
-      await setDoc(
-        doc(db, 'users', user.uid),
-        {
-          status: newStatus,
-        },
-        { merge: true },
-      )
-
-      userInfo.value.status = newStatus
-    } catch (err) {
-      console.error('Ошибка обновления статуса:', err)
-      throw err
+    if (!canEditStatus(userId)) {
+      throw new Error('Недостаточно прав для изменения статуса')
     }
+
+    const db = getFirestore()
+    await setDoc(
+      doc(db, 'users', userId),
+      { status: newStatus },
+      { merge: true }
+    )
+
+    // Возвращаем обновленные данные
+    return await loadAnyUserProfile(userId)
+  } catch (err) {
+    console.error('Ошибка обновления статуса:', err)
+    throw err
   }
+}
 
   const trackLogin = async () => {
     const auth = getAuth()
@@ -168,19 +175,23 @@ export const useAuthStore = defineStore('auth', () => {
     )
   }
 
-  const loadUserProfile = async () => {
+  const loadUserProfile = async (userId?: string) => {
   try {
     const auth = getAuth()
-    const user = auth.currentUser
-    if (!user) return
+    const currentUser = auth.currentUser
+    if (!currentUser) return
 
+    const targetUserId = userId || currentUser.uid
     const db = getFirestore()
-    const userDoc = await getDoc(doc(db, 'users', user.uid))
+    const userDoc = await getDoc(doc(db, 'users', targetUserId))
     
     if (userDoc.exists()) {
+      const data = userDoc.data()
       userInfo.value = {
         ...userInfo.value,
-        ...userDoc.data()
+        ...data,
+        isAdmin: (data.permission || 0) >= 3, // Добавляем флаг админа
+        canEditStatus: canEditStatus(targetUserId)
       }
     }
   } catch (error) {
@@ -189,13 +200,46 @@ export const useAuthStore = defineStore('auth', () => {
   }
 }
 
-const canViewProfile = (targetUserId: string) => {
-  const currentUser = userInfo.value;
-  // Админ (permission=3) может смотреть все профили
-  if (currentUser.permission === 3) return true;
-  // Остальные только свой профиль
-  return currentUser.userId === targetUserId;
+const loadAnyUserProfile = async (userId: string) => {
+  try {
+    const db = getFirestore();
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    
+    if (userDoc.exists()) {
+      return {
+        ...userDoc.data(),
+        userId: userDoc.id
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error('Ошибка загрузки профиля:', error);
+    throw error;
+  }
 };
 
-  return { userInfo, error, loader, logout, auth, updateUserStatus, trackLogin, loadUserProfile, }
+const canViewProfile = (targetUserId: string) => {
+  const currentUser = userInfo.value
+  if (currentUser.isAdmin) return true
+  return currentUser.userId === targetUserId
+}
+  const canEditStatus = (targetUserId: string) => {
+  const currentUser = userInfo.value;
+  if (currentUser.isAdmin) return true;
+  return false;
+};
+
+  return {
+    userInfo,
+    error,
+    loader,
+    logout,
+    auth,
+    updateUserStatus,
+    trackLogin,
+    canViewProfile,
+    canEditStatus,
+    loadUserProfile,
+    loadAnyUserProfile
+  }
 })

@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useSalesStore } from '@/stores/sales'
 import { Timestamp } from 'firebase/firestore';
 import type { IIncome } from '@/utils/interfaces';
+import { useRoute, useRouter } from 'vue-router';
+import { useEmployeesStore } from '@/stores/employees';
+
+import Loader from '../../components/loader.vue'
+
 
 interface IMonthlySales {
   [key: string]: {
@@ -12,23 +17,29 @@ interface IMonthlySales {
     canceled: number; 
   };
 }
-
+const router = useRouter();
+const route = useRoute()
 const authStore = useAuthStore()
 const salesStore = useSalesStore()
+const employeesStore = useEmployeesStore();
 
 const chartData = ref();
 const chartOptions = ref();
 const isLoading = ref<boolean>(true)
+const viewedUser = ref<any>(null);
+const profileUserId = computed(() => route.params.uid || authStore.userInfo.userId)
+const isCurrentUserProfile = computed(() => profileUserId.value === authStore.userInfo.userId)
+const canEditStatus = computed(() => authStore.canEditStatus(profileUserId.value as string))
 
 const userStats = computed(() => {
-  const userSales = salesStore.sales.filter(sale => sale.createdBy === authStore.userInfo.userId)
+  const userSales = salesStore.sales.filter(sale => sale.createdBy === viewedUser.value?.userId);
   return {
     total: userSales.length,
     open: userSales.filter((s: { status: string }) => s.status === 'open').length,
     closed: userSales.filter((s: { status: string }) => s.status === 'closed').length,
     canceled: userSales.filter((s: { status: string }) => s.status === 'canceled').length
-  }
-})
+  };
+});
 
 const statusOptions = [
   { label: 'На работе', value: 'working' },
@@ -36,8 +47,28 @@ const statusOptions = [
   { label: 'На больничном', value: 'sick_leave' }
 ]
 
+const switchProfile = (userId: string) => {
+  router.push(`/profile/${userId}`);
+};
+
+const updateStatus = async (newStatus: string) => {
+  try {
+    isLoading.value = true;
+    const updatedUser = await authStore.updateUserStatus(
+      newStatus as 'working' | 'vacation' | 'sick_leave',
+      profileUserId.value as string
+    );
+    viewedUser.value = updatedUser;
+    prepareMonthlyChartData(); // Обновляем данные графика
+  } catch (error) {
+    console.error('Ошибка обновления статуса:', error);
+  } finally {
+    isLoading.value = false;
+  }
+};
+
 const lastLoginFormatted = computed(() => {
-  const lastLogin = authStore.userInfo.lastLogin;
+  const lastLogin = viewedUser.value?.lastLogin;
   
   if (!lastLogin) return 'Нет данных';
   
@@ -63,7 +94,7 @@ const lastLoginFormatted = computed(() => {
 
 const prepareMonthlyChartData = () => {
   const userSales = salesStore.sales.filter((sale: IIncome) => 
-    sale.createdBy === authStore.userInfo.userId
+    sale.createdBy === viewedUser.value?.userId
   );
   
   if (userSales.length === 0) {
@@ -167,12 +198,46 @@ const prepareMonthlyChartData = () => {
   };
 };
 
+const employees = computed(() => 
+  employeesStore.employees.filter(e => e.id !== authStore.userInfo.userId)
+);
+
+watch(() => route.params.uid, async (newUid) => {
+  if (!newUid) return;
+  
+  try {
+    isLoading.value = true;
+    
+    if (!authStore.canViewProfile(newUid as string)) {
+      await router.push('/profile');
+      return;
+    }
+
+    // Загружаем данные нового пользователя
+    viewedUser.value = await authStore.loadAnyUserProfile(newUid as string);
+    prepareMonthlyChartData();
+  } catch (error) {
+    console.error('Ошибка загрузки данных:', error);
+  } finally {
+    isLoading.value = false;
+  }
+});
+
 onMounted(async () => {
   try {
+    isLoading.value = true;
+    
+    if (authStore.userInfo.isAdmin) {
+      await employeesStore.fetchEmployees();
+    }
+
     await Promise.all([
       salesStore.fetchAllSales(),
-      authStore.loadUserProfile()
+      authStore.loadAnyUserProfile(profileUserId.value as string).then(data => {
+        viewedUser.value = data;
+      })
     ]);
+    
     prepareMonthlyChartData();
   } catch (error) {
     console.error('Ошибка загрузки данных:', error);
@@ -183,27 +248,40 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="content p-4">
+  <div v-if="viewedUser" class="content p-4">
     <app-card>
+      <template #header v-if="authStore.userInfo.isAdmin">
+        <div class="flex items-center gap-2 p-2">
+          <span class="font-medium">Переключить профиль:</span>
+          <app-select 
+            :options="employees"
+            optionLabel="name"
+            optionValue="id"
+            @change="switchProfile($event.value)"
+            placeholder="Выберите сотрудника"
+          />
+        </div>
+      </template>
       <template #content>
         <div class="flex flex-col md:flex-row gap-6">
           <!-- Блок с информацией о пользователе -->
           <div class="w-full md:w-1/3">
             <div class="flex flex-col items-center mb-6">
               <div class="w-32 h-32 rounded-full flex items-center justify-center text-6xl" 
-                :class="authStore.userInfo.gender === 'Женский' 
+                :class="viewedUser?.gender === 'Женский' 
                   ? 'bg-pink-100 text-pink-500' 
                   : 'bg-blue-100 text-blue-500'">
                 <i class="pi pi-user text-6xl"></i>
               </div>
               <h2 class="text-xl font-semibold text-center">
-                {{ `${authStore.userInfo.lastName} ${authStore.userInfo.firstName}` }}
+                {{ `${viewedUser?.lastName} ${viewedUser?.firstName}` }}
+                <span v-if="!isCurrentUserProfile" class="text-sm text-gray-500">(профиль сотрудника)</span>
               </h2>
               <div class="flex items-center gap-2 mt-2">
-                <app-tag :value="authStore.userInfo.jobPosition" severity="info" />
-                <app-tag :value="statusOptions.find(s => s.value === authStore.userInfo.status)?.label || 'Не указан'" 
-                         :severity="authStore.userInfo.status === 'working' ? 'success' : 
-                                   authStore.userInfo.status === 'vacation' ? 'warning' : 'danger'" />
+                <app-tag :value="viewedUser?.jobPosition" severity="info" />
+                <app-tag :value="statusOptions.find(s => s.value === viewedUser?.status)?.label || 'Не указан'" 
+                         :severity="viewedUser?.status === 'working' ? 'success' : 
+                                   viewedUser?.status === 'vacation' ? 'warning' : 'danger'" />
               </div>
             </div>
             
@@ -211,27 +289,27 @@ onMounted(async () => {
               <div>
                 <label class="text-gray-500 text-sm">ФИО:</label>
                 <p class="font-medium">{{ 
-                  `${authStore.userInfo.lastName || ''} 
-                  ${authStore.userInfo.firstName || ''} 
-                  ${authStore.userInfo.middleName || ''}`.trim() 
+                  `${viewedUser?.lastName || ''} 
+                  ${viewedUser?.firstName || ''} 
+                  ${viewedUser?.middleName || ''}`.trim() 
                 }}</p>
               </div>
               
               <div>
                 <label class="text-gray-500 text-sm">Email:</label>
-                <p class="font-medium">{{ authStore.userInfo.email }}</p>
+                <p class="font-medium">{{ viewedUser?.email }}</p>
               </div>
               
               <div>
                 <label class="text-gray-500 text-sm">Должность:</label>
-                <p class="font-medium">{{ authStore.userInfo.jobPosition }}</p>
+                <p class="font-medium">{{ viewedUser?.jobPosition }}</p>
               </div>
               
               <div>
                 <label class="text-gray-500 text-sm">Пол:</label>
                 <p class="font-medium">{{ 
-                  authStore.userInfo.gender === 'Мужской' ? 'Мужской' : 
-                  authStore.userInfo.gender === 'Женский' ? 'Женский' : 'Не указан' 
+                  viewedUser?.gender === 'Мужской' ? 'Мужской' : 
+                  viewedUser?.gender === 'Женский' ? 'Женский' : 'Не указан' 
                 }}</p>
               </div>
 
@@ -242,15 +320,20 @@ onMounted(async () => {
               
               <div>
                 <label class="text-gray-500 text-sm">Всего входов:</label>
-                <p class="font-medium">{{ authStore.userInfo.loginCount || 0 }}</p>
+                <p class="font-medium">{{ viewedUser?.loginCount || 0 }}</p>
               </div>
 
-              <div>
+              <div v-if="authStore.userInfo.isAdmin">
                 <label class="text-gray-500 text-sm">Статус:</label>
-                <app-select v-model="authStore.userInfo.status" :options="statusOptions" 
-                              optionLabel="label" optionValue="value" 
-                              @change="authStore.updateUserStatus($event.value)"
-                              class="w-full" />
+                <app-select 
+                  v-model="viewedUser.status" 
+                  :options="statusOptions" 
+                  optionLabel="label" 
+                  optionValue="value"
+                  @change="updateStatus($event.value)"
+                  class="w-full"
+                  :disabled="!canEditStatus"
+                />
               </div>
             </div>
           </div>
@@ -321,7 +404,7 @@ onMounted(async () => {
                     </div>
                     <div>
                       <div class="text-gray-500">Всего входов</div>
-                      <div class="font-medium">{{ authStore.userInfo.loginCount || 0 }}</div>
+                      <div class="font-medium">{{ viewedUser?.loginCount || 0 }}</div>
                     </div>
                   </div>
                 </template>
@@ -347,6 +430,10 @@ onMounted(async () => {
         </div>
       </template>
     </app-card>
+  </div>
+  <div v-else class="text-center py-8">
+    <Loader />
+    <p class="mt-4">Загрузка данных профиля...</p>
   </div>
 </template>
 
