@@ -11,6 +11,7 @@ import {
   Timestamp,
   setDoc,
   deleteDoc,
+  updateDoc,
 } from 'firebase/firestore'
 import { getAuth } from 'firebase/auth'
 import { v4 as uuidv4 } from 'uuid'
@@ -107,6 +108,51 @@ const deleteExpense = async (id: string) => {
   }
 };
 
+const updateExpense = async (id: string, updates: Partial<IExpense>) => {
+  loading.value = true;
+  try {
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (!user) throw new Error('Пользователь не авторизован');
+
+    const db = getFirestore();
+    const expenseRef = doc(db, 'expenses', id);
+    
+    // Получаем данные пользователя
+    const userDoc = await getDoc(doc(db, 'users', user.uid));
+    const userData = userDoc.data();
+    const userName = userData
+      ? `${userData.firstName || ''} ${userData.lastName || ''}`.trim()
+      : 'Неизвестный';
+
+    await updateDoc(expenseRef, {
+      ...updates,
+      lastEditedBy: user.uid,
+      lastEditedByName: userName,
+      lastEditedDate: Timestamp.now(),
+    });
+
+    // Обновляем локальное состояние
+    const index = expenses.value.findIndex(e => e.id === id);
+    if (index !== -1) {
+      expenses.value[index] = {
+        ...expenses.value[index],
+        ...updates,
+        lastEditedBy: user.uid,
+        lastEditedByName: userName,
+        lastEditedDate: Timestamp.now(),
+      };
+    }
+
+    return true;
+  } catch (err) {
+    console.error(err);
+    throw err;
+  } finally {
+    loading.value = false;
+  }
+};
+
   return {
     expenses,
     loading,
@@ -115,5 +161,6 @@ const deleteExpense = async (id: string) => {
     fetchAllExpenses,
     addExpense,
     deleteExpense,
+    updateExpense,
   }
 })

@@ -8,6 +8,7 @@ import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import { debounce } from 'lodash-es'
 import Loader from '../../components/loader.vue'
+import type { IProductInSale } from '@/utils/interfaces'
 
 const authStore = useAuthStore()
 const salesStore = useSalesStore()
@@ -16,7 +17,7 @@ const toast = useToast()
 const confirm = useConfirm()
 
 // Реактивные данные формы
-const selectedProducts = ref<Array<{ id: string, name: string, price: number, quantity: number }>>([])
+const selectedProducts = ref<IProductInSale[]>([])
 const clientName = ref<string>('')
 const clientPhone = ref<string>('')
 const clientEmail = ref<string>('')
@@ -185,26 +186,35 @@ const productOptions = computed(() => {
       name: product.name,
       price: product.price,
       stock: product.stock
-    }))
+    } as IProductInSale));
 })
 
 const selectedProductIds = computed({
   get: () => selectedProducts.value.map(p => p.id),
   set: (ids: string[]) => {
-    // Обновляем selectedProducts на основе выбранных ID
     const newProducts = ids.map(id => {
-      const existing = selectedProducts.value.find(p => p.id === id)
-      if (existing) return existing
-
-      const product = productOptions.value.find(p => p.id === id)
-      return {
-        ...product,
-        quantity: 1
+      const existing = selectedProducts.value.find(p => p.id === id);
+      if (existing) return existing;
+      const product = productOptions.value.find(p => p.id === id);
+      if (product) {
+        return {
+          id: product.id,
+          name: product.name,
+          price: product.price,
+          quantity: 1,
+          stock: product.stock
+        } as IProductInSale;
       }
-    })
-    selectedProducts.value = newProducts
+      return {
+        id: id,
+        name: 'Неизвестный продукт',
+        price: 0,
+        quantity: 1
+      } as IProductInSale;
+    });
+    selectedProducts.value = newProducts as IProductInSale[];
   }
-})
+});
 
 const openProductsDialog = (saleData: any) => {
   currentProducts.value = saleData.products || []
@@ -475,10 +485,11 @@ const saveSale = async () => {
       catalogStore.fetchProducts()
     ])
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Ошибка операции'
     toast.add({
       severity: 'error',
       summary: 'Ошибка',
-      detail: error.message || 'Ошибка операции',
+      detail: errorMessage,
       life: 2000
     })
     console.error('Ошибка:', error)
@@ -550,7 +561,7 @@ onMounted(async () => {
 
         <!-- Диалоговое окно -->
         <app-dialog v-model:visible="visible" modal maximizable
-          :header="isEditing ? 'Редактирование сделки' : 'Новая сделка'" class="mx-auto w-2/3" @hide="onDialogHide" :pt="{
+          :header="isEditing ? 'Редактирование сделки' : 'Новая сделка'" class="mx-auto w-full md:w-2/3" @hide="onDialogHide" :pt="{
             headerActions: { class: 'ml-auto' },
             closeButton: { class: 'ml-2' }
           }">
@@ -742,21 +753,18 @@ onMounted(async () => {
             <app-column header="Контакты" class="p-3">
               <template #body="slotProps">
                 <div class="gap-2 w-full">
-                  <!-- Email -->
                   <span v-if="slotProps.data.clientEmail" @click="copyToClipboard(slotProps.data.clientEmail, 'email')"
                     class="m-1 cursor-pointer text-blue-600 hover:text-blue-700 transition-colors p-1 rounded-full bg-blue-100 hover:bg-blue-200"
                     :title="`Email: ${slotProps.data.clientEmail}`">
                     <span class="pi pi-at text-xl"></span>
                   </span>
 
-                  <!-- Телефон -->
                   <span v-if="slotProps.data.clientPhone" @click="copyToClipboard(slotProps.data.clientPhone, 'phone')"
                     class="m-1 cursor-pointer text-green-600 hover:text-green-700 transition-colors p-1 rounded-full bg-green-100 hover:bg-green-200"
                     :title="`Телефон: ${slotProps.data.clientPhone}`">
                     <span class="pi pi-phone text-xl"></span>
                   </span>
 
-                  <!-- WhatsApp -->
                   <span v-if="slotProps.data.clientWhApp"
                     @click="copyToClipboard(slotProps.data.clientWhApp, 'whatsapp')"
                     class="m-1 cursor-pointer text-green-500 hover:text-green-600 transition-colors p-1 rounded-full bg-green-100 hover:bg-green-200"
@@ -764,7 +772,6 @@ onMounted(async () => {
                     <span class="pi pi-whatsapp text-xl"></span>
                   </span>
 
-                  <!-- Telegram -->
                   <span v-if="slotProps.data.clientTg" @click="copyToClipboard(slotProps.data.clientTg, 'telegram')"
                     class="m-1 cursor-pointer text-blue-500 hover:text-blue-600 transition-colors p-1 rounded-full bg-blue-100 hover:bg-blue-200"
                     :title="`Telegram: ${slotProps.data.clientTg}`">
@@ -800,7 +807,7 @@ onMounted(async () => {
                 </app-tag>
               </template>
             </app-column>
-            <app-column>
+            <app-column header="Действия" class="p-3">
               <template #body="slotProps">
                 <div class="flex gap-2">
                   <app-button icon="pi pi-pencil" severity="info" @click="openEditDialog(slotProps.data)" />
@@ -815,7 +822,7 @@ onMounted(async () => {
   </div>
 
   <app-dialog v-model:visible="productsDialogVisible" header="Список продуктов" modal
-    class="max-w-md rounded-lg shadow-xl" :pt="{
+    class="rounded-lg shadow-xl w-full md:w-1/2" :pt="{
       root: { class: 'bg-white' },
       header: { class: 'border-b border-gray-200 px-6 py-4' },
       content: { class: 'p-0' },
@@ -824,7 +831,7 @@ onMounted(async () => {
     <div class="divide-y divide-gray-200">
       <div v-for="product in currentProducts" :key="product.id"
         class="flex justify-between items-center px-6 py-3 hover:bg-gray-50 transition-colors">
-        <span class="text-gray-800 font-medium truncate max-w-[200px]">
+        <span class="text-gray-800 font-medium truncate max-w-[300px]">
           {{ product.name }}
         </span>
         <span class="text-gray-600 font-semibold whitespace-nowrap">

@@ -67,11 +67,16 @@ const items = ref<IMenuItem[]>([
   },
 ])
 
+const isActiveRoute = (itemPath: string | undefined) => {
+  if (!itemPath) return false;
+  if (itemPath === '/profile') return route.path.startsWith('/profile');
+  return route.path === itemPath;
+}
+
 const logout = () => {
     authStore.logout()
     router.push('/login')
 }
-
 </script>
 
 <template>
@@ -88,8 +93,8 @@ const logout = () => {
         <template v-if="item.show">
           <router-link v-if="item.path" :to="item.path"
             class="flex items-center no-underline px-3 py-2 rounded-lg transition-colors duration-200" :class="{
-              'bg-indigo-500 text-white': route.path === item.path,
-              'text-indigo-100 hover:bg-indigo-500 hover:text-white': route.path !== item.path
+              'bg-indigo-500 text-white': isActiveRoute(item.path),
+              'text-indigo-100 hover:bg-indigo-500 hover:text-white': !isActiveRoute(item.path)
             }" v-bind="props.action">
             <span :class="item.icon" class="mr-2"></span>
             <span class="whitespace-nowrap">{{ item.label }}</span>

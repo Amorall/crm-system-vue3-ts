@@ -5,6 +5,7 @@ export interface IProductInSale {
   name: string;
   price: number;
   quantity: number;
+  stock?: number;
 }
 export interface IIncome {
   id: string
@@ -51,6 +52,6 @@ export interface IProduct {
   stock: number;
   category: string;
   imageUrl?: string | null;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: Date | Timestamp;
+  updatedAt: Date | Timestamp;
 }

@@ -9,16 +9,13 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  Timestamp,
 } from 'firebase/firestore'
-import {
-  getStorage,
-  ref as storageRef,
-  uploadBytes,
-  getDownloadURL,
-} from 'firebase/storage'
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import type { IProduct } from '@/utils/interfaces'
 import { getAuth } from 'firebase/auth'
 import { useExpensesStore } from './expenses'
+import { deleteFromCloudinary, extractPublicId } from '@/utils/cloudinaryUploader'
 
 export const useCatalogStore = defineStore('catalog', () => {
   const products = ref<IProduct[]>([])
@@ -56,17 +53,18 @@ export const useCatalogStore = defineStore('catalog', () => {
 
   const deleteImage = async (url: string) => {
     try {
-      // Извлекаем public_id из URL Cloudinary
-      const publicId = url.split('/').slice(-2).join('/').split('.')[0]
-      // Здесь нужно добавить вызов API Cloudinary для удаления изображения
-      // Например, используя axios или fetch
-      const response = await fetch(`/api/delete-image?public_id=${publicId}`)
-      if (!response.ok) throw new Error('Failed to delete image')
+      if (!url) return
+
+      const publicId = extractPublicId(url)
+      if (publicId) {
+        await deleteFromCloudinary(publicId)
+      }
     } catch (err) {
       console.error('Error deleting image:', err)
       throw err
     }
   }
+
   const fetchProducts = async () => {
     loading.value = true
     error.value = ''
@@ -95,8 +93,8 @@ export const useCatalogStore = defineStore('catalog', () => {
       const newProduct: IProduct = {
         ...product,
         id,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
       }
 
       await setDoc(doc(db, 'products', id), newProduct)
@@ -104,10 +102,10 @@ export const useCatalogStore = defineStore('catalog', () => {
       if (product.stock > 0 && product.purchasePrice > 0) {
         const expensesStore = useExpensesStore()
         await expensesStore.addExpense({
-            amount: product.stock * product.purchasePrice,
-            type: 'product',
-            description: `Закупка нового товара - ${product.name} (${product.stock} шт.)`,
-            productId: id,
+          amount: product.stock * product.purchasePrice,
+          type: 'product',
+          description: `Закупка нового товара - ${product.name} (${product.stock} шт.)`,
+          productId: id,
         })
       }
       console.log('Adding product:', newProduct)
@@ -129,21 +127,25 @@ export const useCatalogStore = defineStore('catalog', () => {
         }
       }
 
-      if (product && typeof updates.stock !== 'undefined' && 
-        updates.stock > product.stock && product.purchasePrice > 0) {
-      const addedStock = updates.stock - product.stock;
-      const expensesStore = useExpensesStore();
-      await expensesStore.addExpense({
-        amount: addedStock * product.purchasePrice,
-        type: 'product',
-        description: `Пополнение склада - ${product.name} (+${addedStock} шт.)`,
-        productId: id,
-      });
-    }
+      if (
+        product &&
+        typeof updates.stock !== 'undefined' &&
+        updates.stock > product.stock &&
+        product.purchasePrice > 0
+      ) {
+        const addedStock = updates.stock - product.stock
+        const expensesStore = useExpensesStore()
+        await expensesStore.addExpense({
+          amount: addedStock * product.purchasePrice,
+          type: 'product',
+          description: `Пополнение склада - ${product.name} (+${addedStock} шт.)`,
+          productId: id,
+        })
+      }
 
       await updateDoc(doc(db, 'products', id), {
         ...updates,
-        updatedAt: new Date(),
+        updatedAt: Timestamp.now(),
       })
 
       products.value = products.value.map((p) =>

@@ -1,6 +1,6 @@
 {
   "name": "crm-system-vue3-ts",
-  "version": "0.0.0",
+  "version": "0.0.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,14 +10,17 @@
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
     "lint": "eslint . --fix",
-    "format": "prettier --write src/"
+    "format": "prettier --write src/",
+    "server": "node dist-server/delete-server.js"
   },
   "dependencies": {
+    "@fastify/cors": "^11.0.1",
     "@primeuix/themes": "^1.1.0",
     "@tailwindcss/vite": "^4.1.5",
-    "axios": "^1.9.0",
     "chart.js": "^4.4.9",
     "cloudinary": "^2.6.1",
+    "dotenv": "^16.5.0",
+    "fastify": "^5.3.3",
     "firebase": "^11.6.1",
     "lodash-es": "^4.17.21",
     "pinia": "^3.0.1",
@@ -31,7 +34,7 @@
   "devDependencies": {
     "@tsconfig/node22": "^22.0.1",
     "@types/lodash-es": "^4.17.12",
-    "@types/node": "^22.14.0",
+    "@types/node": "^22.15.18",
     "@vitejs/plugin-vue": "^5.2.3",
     "@vue/eslint-config-prettier": "^10.2.0",
     "@vue/eslint-config-typescript": "^14.5.0",
