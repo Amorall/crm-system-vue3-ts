@@ -67,6 +67,50 @@ const errors = ref({
   category: '',
 });
 
+const touched = ref({
+  name: false,
+  description: false,
+  price: false,
+  purchasePrice: false,
+  stock: false,
+  category: false,
+  imageUrl: false
+});
+
+const isFormValid = computed(() => {
+  return (
+    productForm.value.name.trim() &&
+    productForm.value.description.trim() &&
+    productForm.value.price > 0 &&
+    productForm.value.purchasePrice > 0 &&
+    productForm.value.stock >= 0 &&
+    productForm.value.category.trim() &&
+    (editingProduct.value ? true : productForm.value.imageUrl) &&
+    productForm.value.purchasePrice <= productForm.value.price
+  );
+});
+
+const resetValidation = () => {
+  touched.value = {
+    name: false,
+    description: false,
+    price: false,
+    purchasePrice: false,
+    stock: false,
+    category: false,
+    imageUrl: false
+  };
+  
+  errors.value = {
+    name: '',
+    description: '',
+    price: '',
+    purchasePrice: '',
+    stock: '',
+    category: '',
+  };
+};
+
 const validateForm = () => {
   let isValid = true;
   errors.value = {
@@ -77,6 +121,7 @@ const validateForm = () => {
     stock: '',
     category: '',
   };
+
   // Проверка названия
   if (!productForm.value.name.trim()) {
     errors.value.name = 'Название обязательно';
@@ -108,6 +153,9 @@ const validateForm = () => {
   if (productForm.value.purchasePrice <= 0) {
     errors.value.purchasePrice = 'Закупочная цена должна быть больше 0';
     isValid = false;
+  } else if (productForm.value.purchasePrice > productForm.value.price) {
+    errors.value.purchasePrice = 'Закупочная цена не может быть больше цены продажи';
+    isValid = false;
   }
 
   if (productForm.value.price <= 0) {
@@ -128,6 +176,11 @@ const validateForm = () => {
   }
 
   return isValid;
+};
+
+const handleBlur = (field: keyof typeof touched.value) => {
+  touched.value[field] = true;
+  validateForm();
 };
 
 const onFileSelect = (event: { files: File[] }) => {
@@ -366,6 +419,7 @@ const closeDialog = async () => {
   editingProduct.value = null;
   tempUploadedImages.value = []; // Очищаем временные изображения
   resetForm();
+  resetValidation();
 };
 
 const resetForm = () => {
@@ -382,17 +436,12 @@ const resetForm = () => {
 };
 
 const saveProduct = async () => {
+  // Помечаем все поля как touched перед валидацией
+  Object.keys(touched.value).forEach(key => {
+    touched.value[key as keyof typeof touched.value] = true;
+  });
+
   if (!validateForm()) return;
-  // Проверяем, что изображение загружено (если это новый товар)
-  if (!editingProduct.value && !productForm.value.imageUrl) {
-    toast.add({
-      severity: 'warn',
-      summary: 'Внимание',
-      detail: 'Загрузите изображение товара',
-      life: 3000
-    });
-    return;
-  }
 
   saving.value = true;
   try {
@@ -433,7 +482,6 @@ const saveProduct = async () => {
       life: 3000
     });
   } finally {
-    console.log('Saving product with image:', productForm.value.imageUrl);
     saving.value = false;
   }
 };
@@ -489,7 +537,7 @@ const resetFilters = () => {
 
     <div class="flex justify-between items-center mb-4">
       <h1 class="text-2xl font-bold">Каталог средств защиты информации</h1>
-      <app-button v-if="hasAdminAccess" @click="showAddDialog = true" :disabled="loading">
+      <app-button v-if="hasAdminAccess && products.length != 0" @click="showAddDialog = true" :disabled="loading">
         <i class="pi pi-plus" />
         <span class="w-[206px] hidden md:block">Добавить продукт</span>
       </app-button>
@@ -600,14 +648,12 @@ const resetFilters = () => {
 
     <!-- Диалог добавления/редактирования -->
     <app-dialog v-model:visible="showAddDialog" :header="editingProduct ? 'Редактировать продукт' : 'Добавить продукт'"
-      modal class="w-full md:max-w-2xl" @update:visible="(val: any) => {
-        if (!val) closeDialog();
-      }">
+      modal class="w-full md:w-1/2" @hide="closeDialog">
       <div class="grid grid-cols-1 gap-4">
         <!-- Поле для загрузки изображения -->
         <div class="field">
-          <label class="block mb-2 font-medium">Изображение товара</label>
-
+          <label class="block mb-2 font-medium">Изображение товара<span v-if="!editingProduct"
+              class="text-red-500">*</span></label>
           <div v-if="productForm.imageUrl" class="mb-4 relative group">
             <img :src="productForm.imageUrl" class="w-full h-48 object-cover rounded-lg border border-gray-200"
               alt="Превью" />
@@ -644,16 +690,19 @@ const resetFilters = () => {
 
         <div class="field">
           <label for="name" class="block mb-2 font-medium">Название <span class="text-red-500">*</span></label>
-          <app-inputtext id="name" v-model="productForm.name" class="w-full" :class="{ 'p-invalid': errors.name }" />
-          <small v-if="errors.name" class="p-error text-red-500">{{ errors.name }}</small>
+          <app-inputtext id="name" v-model="productForm.name" class="w-full"
+            :class="{ 'p-invalid': (touched.name && errors.name) }" @blur="handleBlur('name')" />
+          <small v-if="touched.name && errors.name" class="p-error text-red-500">{{ errors.name }}</small>
         </div>
+
 
         <div class="field">
           <label for="description" class="block mb-2 font-medium">Описание <span class="text-red-500">*</span></label>
           <app-textarea id="description" v-model="productForm.description" rows="3" class="w-full"
-            :class="{ 'p-invalid': errors.description }" />
+            :class="{ 'p-invalid': (touched.description && errors.description) }" @blur="handleBlur('description')" />
           <div class="flex justify-between">
-            <small v-if="errors.description" class="p-error text-red-500">{{ errors.description }}</small>
+            <small v-if="touched.description && errors.description" class="p-error text-red-500">{{ errors.description
+            }}</small>
             <small :class="{ 'text-red-500': productForm.description.length > 500 }">
               {{ productForm.description.length }}/500
             </small>
@@ -665,22 +714,28 @@ const resetFilters = () => {
           <div class="field">
             <label for="price" class="block mb-2 font-medium">Цена продажи<span class="text-red-500">*</span></label>
             <app-inputnumber id="price" v-model="productForm.price" mode="currency" currency="RUB" locale="ru-RU"
-              class="w-full" :class="{ 'p-invalid': errors.price }" />
-            <small v-if="errors.price" class="p-error text-red-500">{{ errors.price }}</small>
+              class="w-full" :class="{ 'p-invalid': (touched.price && errors.price) }" @blur="handleBlur('price')" />
+            <small v-if="touched.price && errors.price" class="p-error text-red-500">{{ errors.price }}</small>
           </div>
 
           <div class="field">
-            <label for="purchasePrice" class="block mb-2 font-medium">Закупочная цена</label>
+            <label for="purchasePrice" class="block mb-2 font-medium">Закупочная цена<span
+                class="text-red-500">*</span></label>
             <app-inputnumber id="purchasePrice" v-model="productForm.purchasePrice" mode="currency" currency="RUB"
-              locale="ru-RU" class="w-full" :min="0" />
+              locale="ru-RU" class="w-full" :min="0"
+              :class="{ 'p-invalid': (touched.purchasePrice && errors.purchasePrice) }"
+              @blur="handleBlur('purchasePrice')" />
+            <small v-if="touched.purchasePrice && errors.purchasePrice" class="p-error text-red-500">{{
+              errors.purchasePrice
+            }}</small>
           </div>
 
           <div class="field">
             <label for="stock" class="block mb-2 font-medium">Остаток на складе <span
                 class="text-red-500">*</span></label>
             <app-inputnumber id="stock" v-model="productForm.stock" class="w-full"
-              :class="{ 'p-invalid': errors.stock }" />
-            <small v-if="errors.stock" class="p-error text-red-500">{{ errors.stock }}</small>
+              :class="{ 'p-invalid': (touched.stock && errors.stock) }" @blur="handleBlur('stock')" />
+            <small v-if="touched.stock && errors.stock" class="p-error text-red-500">{{ errors.stock }}</small>
           </div>
         </div>
 
@@ -689,14 +744,14 @@ const resetFilters = () => {
           <label class="block mb-2 font-medium">Категория <span class="text-red-500">*</span></label>
 
           <app-select v-model="productForm.category" :options="categories" placeholder="Выберите категорию"
-            class="w-full mb-2" :filter="true" :class="{ 'p-invalid': errors.category }" optionLabel="" showClear
-            @clear="resetNewCategory" />
+            class="w-full mb-2" :filter="true" :class="{ 'p-invalid': (touched.category && errors.category) }"
+            optionLabel="" showClear @blur="handleBlur('category')" @clear="resetNewCategory" />
 
           <div
             v-if="!productForm.category || (!categories.includes(productForm.category) && productForm.category !== '')">
             <div class="flex gap-2 mb-2">
               <app-inputtext v-model="newCategory" placeholder="Введите новую категорию" class="flex-1"
-                :class="{ 'p-invalid': errors.category && !productForm.category }" />
+                :class="{ 'p-invalid': (touched.category && errors.category) }" />
               <app-button icon="pi pi-plus" severity="secondary" @click="addNewCategory"
                 v-tooltip="'Добавить новую категорию'" />
             </div>
@@ -707,15 +762,14 @@ const resetFilters = () => {
             <i class="pi pi-check-circle"></i>
             <span>Вы добавили категорию "{{ productForm.category }}". Она будет присвоена текущему товару.</span>
           </div>
-
-          <small v-if="errors.category" class="p-error text-red-500">{{ errors.category }}</small>
+           <small v-if="touched.category && errors.category" class="p-error text-red-500">{{ errors.category }}</small>
         </div>
       </div>
 
       <template #footer>
         <app-button label="Отмена" icon="pi pi-times" @click="closeDialog" severity="secondary" />
         <app-button :label="editingProduct ? 'Обновить' : 'Добавить'" icon="pi pi-check" @click="saveProduct"
-          :loading="saving" />
+          :loading="saving" :disabled="!isFormValid"/>
       </template>
     </app-dialog>
   </div>

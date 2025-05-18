@@ -241,22 +241,26 @@ onMounted(async () => {
         </app-button>
 
         <div class="w-64">
-          <app-inputtext @input="debouncedSearch($event.target.value)" placeholder="Поиск расходов..."
-            class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+          <app-inputgroup>
+            <app-inputgroupaddon>
+              <i class="pi pi-search"></i>
+            </app-inputgroupaddon>
+            <app-inputtext @input="debouncedSearch($event.target.value)" placeholder="Поиск расходов..."
+              class="w-full p-2" />
+          </app-inputgroup>
         </div>
       </div>
 
       <!-- Диалоговое окно добавления/редактирования -->
       <app-dialog v-model:visible="visible" modal :header="isEditing ? 'Редактирование расхода' : 'Новый расход'"
-        class="w-full md:w-1/3" @hide="onDialogHide" :pt="{
+        class="w-full md:w-1/2" @hide="onDialogHide" :pt="{
           root: { class: 'rounded-lg shadow-xl' },
           header: { class: 'border-b border-gray-200 px-6 py-4 bg-white rounded-t-lg' },
           content: { class: 'px-6 py-4 bg-white' },
-          footer: { class: 'border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-lg flex justify-end gap-2' }
         }">
         <div class="flex flex-col gap-4">
           <div class="field">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Категория *</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Категория<span class="text-red-500">*</span></label>
             <app-select v-model="category" :options="expensesStore.categories" optionLabel="label" optionValue="value"
               placeholder="Выберите категорию" :class="{ 'p-invalid': categoryError }" @blur="categoryTouched = true"
               class="w-full" />
@@ -264,15 +268,15 @@ onMounted(async () => {
           </div>
 
           <div class="field">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Сумма *</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Сумма<span class="text-red-500">*</span></label>
             <app-inputnumber v-model="amount" mode="currency" currency="RUB" locale="ru-RU"
               :class="{ 'p-invalid': amountError }" @blur="amountTouched = true" class="w-full" />
             <small v-if="amountError" class="text-red-500 text-sm mt-1 block">{{ amountError }}</small>
           </div>
 
           <div class="field">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Описание *</label>
-            <app-inputtext v-model="description" :class="{ 'p-invalid': descriptionError }"
+            <label class="block text-sm font-medium text-gray-700 mb-1">Описание<span class="text-red-500">*</span></label>
+            <app-textarea v-model="description" :class="{ 'p-invalid': descriptionError }" rows="3"
               @blur="descriptionTouched = true" class="w-full" />
             <small v-if="descriptionError" class="text-red-500 text-sm mt-1 block">{{ descriptionError }}</small>
           </div>

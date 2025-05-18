@@ -52,8 +52,10 @@ const validateClientName = (value: string): string | true => {
 }
 
 const validateEmail = (value: string): string | true => {
-  if (!value) return ''
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value)) return 'Некорректный email (пример: example@mail.ru)'
+  if (!value && !hasContactFilled.value) return ''
+  if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value)) {
+    return 'Некорректный email (пример: example@mail.ru)'
+  }
   return true
 }
 
@@ -99,7 +101,7 @@ const clientPhoneError = computed(() => {
 })
 
 const clientEmailError = computed(() => {
-  if (!clientEmailTouched.value || hasContactFilled.value) return null
+  if (!clientEmailTouched.value) return null
   return validateEmail(clientEmail.value) === true ? null : validateEmail(clientEmail.value)
 })
 
@@ -132,7 +134,7 @@ const isClientPhoneInvalid = computed(() => {
 })
 
 const isClientEmailInvalid = computed(() => {
-  return clientEmailTouched.value && clientEmailError.value !== null && !hasContactFilled.value
+  return clientEmailTouched.value && clientEmailError.value !== null
 })
 
 const isClientWhAppInvalid = computed(() => {
@@ -150,17 +152,20 @@ const isContactInvalid = computed(() => {
 
 // Общая валидность формы
 const isFormValid = computed(() => {
-  return (
-    validateClientName(clientName.value) === true &&
-    validateProducts(selectedProducts.value) === true &&
-    hasAtLeastOneContact.value &&
-    ((clientPhone.value != '') ||
-      (clientEmail.value ? validateEmail(clientEmail.value) === true : true) ||
-      (clientWhApp.value != '') ||
-      (clientTg.value ? validateTelegram(clientTg.value) === true : true))
-  )
+  // Проверка обязательных полей
+  const isNameValid = validateClientName(clientName.value) === true
+  const isProductsValid = validateProducts(selectedProducts.value) === true
+  const hasContacts = hasAtLeastOneContact.value
+  
+  // Проверка валидности каждого контакта, если он указан
+  const isEmailValid = clientEmail.value ? validateEmail(clientEmail.value) === true : true
+  const isPhoneValid = clientPhone.value ? validatePhone(clientPhone.value) === true : true
+  const isWhAppValid = clientWhApp.value ? validateWhApp(clientWhApp.value) === true : true
+  const isTgValid = clientTg.value ? validateTelegram(clientTg.value) === true : true
+  
+  return isNameValid && isProductsValid && hasContacts && 
+    isEmailValid && isPhoneValid && isWhAppValid && isTgValid
 })
-
 
 const onDialogHide = () => {
   resetForm()
@@ -553,23 +558,29 @@ onMounted(async () => {
           </app-button>
 
           <div class="w-64">
-            <app-inputtext @input="debouncedSearch($event.target.value)" placeholder="Поиск по сделкам..."
-              class="w-full p-2 border rounded" />
+            <app-inputgroup>
+              <app-inputgroupaddon>
+                <i class="pi pi-search"></i>
+              </app-inputgroupaddon>
+              <app-inputtext @input="debouncedSearch($event.target.value)" placeholder="Поиск по сделкам..."
+                class="w-full p-2" />
+            </app-inputgroup>
           </div>
         </div>
 
 
         <!-- Диалоговое окно -->
         <app-dialog v-model:visible="visible" modal maximizable
-          :header="isEditing ? 'Редактирование сделки' : 'Новая сделка'" class="mx-auto w-full md:w-2/3" @hide="onDialogHide" :pt="{
+          :header="isEditing ? 'Редактирование сделки' : 'Новая сделка'" class="mx-auto w-full md:w-2/3"
+          @hide="onDialogHide" :pt="{
             headerActions: { class: 'ml-auto' },
             closeButton: { class: 'ml-2' }
           }">
           <div class="flex flex-col gap-4 p-4">
-            <span class="block mb-2">Поля, помеченные *, обязательны для заполнения</span>
+            <span class="block mb-2">Поля, помеченные * обязательны для заполнения</span>
 
             <div class="field">
-              <label class="block mb-2 font-medium">Основная информация:</label>
+              <label class="block mb-2 font-medium">Основная информация:<span class="text-red-500">*</span></label>
 
               <app-floatlabel variant="on">
                 <app-multiselect v-model="selectedProductIds" :options="productOptions" optionLabel="name"
@@ -623,7 +634,7 @@ onMounted(async () => {
                     </div>
                   </template>
                 </app-multiselect>
-                <label>Список продуктов *</label>
+                <label>Список продуктов</label>
               </app-floatlabel>
               <small v-if="isProductsInvalid" class="text-red-500 text-sm">
                 {{ productsError }}
@@ -645,14 +656,14 @@ onMounted(async () => {
               <app-floatlabel variant="on">
                 <app-inputtext v-model="clientName" :class="{ 'p-invalid': isClientNameInvalid }"
                   @blur="clientNameTouched = true" class="w-full" />
-                <label>ФИО клиента *</label>
+                <label>ФИО клиента</label>
               </app-floatlabel>
               <small v-if="isClientNameInvalid" class="text-red-500 text-sm">
                 {{ clientNameError }}
               </small>
             </div>
 
-            <span class="font-medium">Контакты (заполнен должен быть хотя бы один):</span>
+            <span class="font-medium">Контакты (заполнен должен быть хотя бы один):<span class="text-red-500">*</span></span>
             <small v-if="isContactInvalid" class="text-red-500 text-sm">
               {{ contactError }}
             </small>
@@ -736,11 +747,10 @@ onMounted(async () => {
           <Loader class="flex justify-between items-center" />
         </template>
 
-        <app-message v-else-if="!salesStore.sales.length" severity="info" icon="pi pi-question-circle"
-          variant="outlined">Список
-          сделок пуст. Пожалуйста добавьте сделку
-          по
-          кнопке "Добавить"</app-message>
+        <div v-else-if="!salesStore.sales.length" class="p-8 text-center text-gray-500">
+          <i class="pi pi-inbox text-4xl mb-2 text-gray-300"></i>
+          <p>Список сделок пуст</p>
+        </div>
 
         <!-- Таблица -->
         <div v-else class="mt-6">
@@ -857,6 +867,4 @@ onMounted(async () => {
 
 </template>
 
-<style scoped>
-
-</style>
+<style scoped></style>
