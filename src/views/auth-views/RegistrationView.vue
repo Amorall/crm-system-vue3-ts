@@ -24,7 +24,7 @@ const firstNameTouched = ref<boolean>(false);
 const lastNameTouched = ref<boolean>(false);
 const middleNameTouched = ref<boolean>(false);
 const positionTouched = ref<boolean>(false);
-const selectedPosition = ref<{name: string, code: string} | null>(null);
+const selectedPosition = ref<{ name: string, code: string } | null>(null);
 
 const emailDomains: string[] = [
   'gmail.com', 'mail.ru', 'yandex.ru', 'outlook.com', 'yahoo.com',
@@ -69,8 +69,13 @@ const validateEmail = (value: string): string | true => {
 
 const validatePassword = (value: string): string | true => {
   if (!value) return 'Пароль обязателен для заполнения';
-  if (value.length < 6) return 'Пароль должен содержать не менее 6 символов';
+  if (value.length < 8) return 'Пароль должен содержать не менее 8 символов';
   if (value.length > 32) return 'Пароль не может превышать 32 символа';
+  if (!/\d/.test(value)) return 'Пароль должен содержать хотя бы одну цифру';
+  if (!/[A-ZА-Я]/.test(value)) return 'Пароль должен содержать хотя бы одну заглавную букву';
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(value)) {
+    return 'Пароль должен содержать хотя бы один специальный символ';
+  }
   return true;
 };
 
@@ -201,9 +206,11 @@ const signup = async () => {
                 <i v-show="isPasswordFilled || showPasswordIcon"
                   class="pi pi-lock absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
                 <button type="button" @click="togglePasswordVisibility"
-                  class="absolute right-3 top-1/2 transform -translate-y-1/2">
-                  <i :class="showPassword ? 'pi pi-eye-slash' : 'pi pi-eye'"></i>
+                  class="absolute right-10 top-1/2 transform -translate-y-1/2 cursor-pointer">
+                  <i :class="showPassword ? 'pi pi-eye-slash' : 'pi pi-eye'" class="p-1"></i>
                 </button>
+                <span
+                  class="pi pi-question absolute right-3 top-1/2 transform -translate-y-1/2 border-l p-1" v-tooltip.top="'Пароль должен содержать не менее 8 символов, включая цифру, заглавную букву и специальный символ'"></span>
                 <label for="password">Пароль</label>
               </div>
             </app-floatlabel>

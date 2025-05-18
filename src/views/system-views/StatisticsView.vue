@@ -262,7 +262,7 @@ const doughnutChartOptions = ref({
           </div>
         </div>
 
-        <div class="card p-4 bg-white rounded-lg shadow flex-1 max-h-[504px]">
+        <div class="card p-4 bg-white rounded-lg shadow flex-1">
           <h3 class="font-semibold mb-2">Топ товаров по остатку</h3>
 
           <div v-if="isLoading" class="skeleton-container">
