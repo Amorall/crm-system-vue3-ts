@@ -1,16 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useSalesStore } from '@/stores/sales'
 import { useExpensesStore } from '@/stores/expenses'
 import { useCatalogStore } from '@/stores/catalog'
 import { throttle } from 'lodash-es'
 
-import Skeleton from 'primevue/skeleton'
-import Chart from 'primevue/chart'
-import DataTable from 'primevue/datatable'
-import Column from 'primevue/column'
-import Tag from 'primevue/tag'
 import StatCard from '@/components/StatCard.vue'
+import type Chart from 'primevue/chart'
 
 
 const salesStore = useSalesStore()
@@ -91,36 +87,36 @@ const salesExpensesChartData = computed(() => {
   const salesByMonth = Array(12).fill(0)
   const expensesByMonth = Array(12).fill(0)
 
-salesStore.sales.forEach(sale => {
-  let saleDate: Date;
-  if (sale.createdDate instanceof Date) {
-    saleDate = sale.createdDate;
-  } else if (sale.createdDate && typeof sale.createdDate.toDate === 'function') {
-    saleDate = sale.createdDate.toDate();
-  } else {
-    return;
-  }
-  if (saleDate.getFullYear() === currentYear && sale.status === 'closed') {
-    const saleTotal = sale.products.reduce((sum, product) => {
-      return sum + (product.price * product.quantity);
-    }, 0);
-    salesByMonth[saleDate.getMonth()] += saleTotal;
-  }
-});
+  salesStore.sales.forEach(sale => {
+    let saleDate: Date;
+    if (sale.createdDate instanceof Date) {
+      saleDate = sale.createdDate;
+    } else if (sale.createdDate && typeof sale.createdDate.toDate === 'function') {
+      saleDate = sale.createdDate.toDate();
+    } else {
+      return;
+    }
+    if (saleDate.getFullYear() === currentYear && sale.status === 'closed') {
+      const saleTotal = sale.products.reduce((sum, product) => {
+        return sum + (product.price * product.quantity);
+      }, 0);
+      salesByMonth[saleDate.getMonth()] += saleTotal;
+    }
+  });
 
   expensesStore.expenses.forEach(expense => {
-  let expenseDate: Date;
-  if (expense.date instanceof Date) {
-    expenseDate = expense.date;
-  } else if (expense.date && typeof expense.date.toDate === 'function') {
-    expenseDate = expense.date.toDate();
-  } else {
-    return;
-  }
-  if (expenseDate.getFullYear() === currentYear) {
-    expensesByMonth[expenseDate.getMonth()] += expense.amount || 0;
-  }
-});
+    let expenseDate: Date;
+    if (expense.date instanceof Date) {
+      expenseDate = expense.date;
+    } else if (expense.date && typeof expense.date.toDate === 'function') {
+      expenseDate = expense.date.toDate();
+    } else {
+      return;
+    }
+    if (expenseDate.getFullYear() === currentYear) {
+      expensesByMonth[expenseDate.getMonth()] += expense.amount || 0;
+    }
+  });
 
   return {
     labels: months,
@@ -247,36 +243,44 @@ const doughnutChartOptions = ref({
         <div class="card p-4 bg-white rounded-lg shadow">
           <h3 class="font-semibold mb-2">Общая статистика</h3>
           <div class="grid grid-cols-2 gap-4">
-            <StatCard title="Общие продажи" :value="totalSales" icon="pi pi-chart-line"
-              color="bg-blue-100 text-blue-600" />
-            <StatCard title="Общие расходы" :value="totalExpenses" icon="pi pi-money-bill"
-              color="bg-red-100 text-red-600" />
-            <StatCard title="Товаров в каталоге" :value="productsCount" icon="pi pi-box"
-              color="bg-green-100 text-green-600" is-units />
-            <StatCard title="Доходность" :value="profitability" icon="pi pi-percentage"
-              color="bg-purple-100 text-purple-600" is-percentage />
+            <template v-if="isLoading">
+              <app-skeleton width="100%" height="6rem" class="mb-2"></app-skeleton>
+              <app-skeleton width="100%" height="6rem" class="mb-2"></app-skeleton>
+              <app-skeleton width="100%" height="6rem" class="mb-2"></app-skeleton>
+              <app-skeleton width="100%" height="6rem" class="mb-2"></app-skeleton>
+            </template>
+            <template v-else>
+              <StatCard title="Общие продажи" :value="totalSales" icon="pi pi-chart-line"
+                color="bg-blue-100 text-blue-600" />
+              <StatCard title="Общие расходы" :value="totalExpenses" icon="pi pi-money-bill"
+                color="bg-red-100 text-red-600" />
+              <StatCard title="Товаров в каталоге" :value="productsCount" icon="pi pi-box"
+                color="bg-green-100 text-green-600" is-units />
+              <StatCard title="Доходность" :value="profitability" icon="pi pi-percentage"
+                color="bg-purple-100 text-purple-600" is-percentage />
+            </template>
           </div>
         </div>
 
-        <div class="card p-4 bg-white rounded-lg shadow flex-1">
-          <h3 class="font-semibold mb-2">Топ товаров</h3>
+        <div class="card p-4 bg-white rounded-lg shadow flex-1 max-h-[504px]">
+          <h3 class="font-semibold mb-2">Топ товаров по остатку</h3>
 
           <div v-if="isLoading" class="skeleton-container">
-            <Skeleton width="100%" height="2rem" class="mb-2"></Skeleton>
-            <Skeleton width="100%" height="2rem" class="mb-2"></Skeleton>
-            <Skeleton width="100%" height="2rem" class="mb-2"></Skeleton>
-            <Skeleton width="100%" height="2rem" class="mb-2"></Skeleton>
-            <Skeleton width="100%" height="2rem"></Skeleton>
+            <app-skeleton width="100%" height="2rem" class="mb-2"></app-skeleton>
+            <app-skeleton width="100%" height="2rem" class="mb-2"></app-skeleton>
+            <app-skeleton width="100%" height="2rem" class="mb-2"></app-skeleton>
+            <app-skeleton width="100%" height="2rem" class="mb-2"></app-skeleton>
+            <app-skeleton width="100%" height="2rem"></app-skeleton>
           </div>
 
-          <DataTable v-else :value="topProducts" :lazy="true" :rows="5" class="p-datatable-sm">
-            <Column field="name" header="Товар"></Column>
-            <Column field="stock" header="Остаток">
+          <app-datatable v-else :value="topProducts" :lazy="true" :rows="5" class="p-datatable-sm">
+            <app-column field="name" header="Товар"></app-column>
+            <app-column field="stock" header="Остаток">
               <template #body="{ data }">
-                <Tag :value="data.stock" :severity="getStockSeverity(data.stock)" />
+                <app-tag :value="data.stock" :severity="getStockSeverity(data.stock)" />
               </template>
-            </Column>
-          </DataTable>
+            </app-column>
+          </app-datatable>
         </div>
       </div>
 
@@ -284,8 +288,8 @@ const doughnutChartOptions = ref({
         <!-- Верхний график -->
         <div class="card p-4 bg-white rounded-lg shadow h-96">
           <h3 class="font-semibold mb-2">Продажи и расходы по месяцам</h3>
-          <Skeleton v-if="isLoading" width="100%" height="100%"></Skeleton>
-          <Chart v-else ref="salesChart" type="bar" :data="salesExpensesChartData" :options="chartOptions"
+          <app-skeleton v-if="isLoading" width="100%" height="100%"></app-skeleton>
+          <app-chart v-else ref="salesChart" type="bar" :data="salesExpensesChartData" :options="chartOptions"
             class="h-full" />
         </div>
 
@@ -293,15 +297,15 @@ const doughnutChartOptions = ref({
         <div class="flex flex-col md:flex-row gap-6">
           <div class="w-full md:w-1/2 card p-4 bg-white rounded-lg shadow h-96">
             <h3 class="font-semibold mb-2">Распределение расходов</h3>
-            <Skeleton v-if="isLoading" width="100%" height="100%"></Skeleton>
-            <Chart v-else ref="expensesChart" type="pie" :data="expensesByCategoryData" :options="pieChartOptions"
+            <app-skeleton v-if="isLoading" width="100%" height="100%"></app-skeleton>
+            <app-chart v-else ref="expensesChart" type="pie" :data="expensesByCategoryData" :options="pieChartOptions"
               class="h-full" />
           </div>
 
           <div class="w-full md:w-1/2 card p-4 bg-white rounded-lg shadow h-96">
-            <h3 class="font-semibold mb-2">Остатки товаров</h3>
-            <Skeleton v-if="isLoading" width="100%" height="100%"></Skeleton>
-            <Chart v-else ref="stockChart" type="doughnut" :data="productsStockData" :options="doughnutChartOptions"
+            <h3 class="font-semibold mb-2">Остатки товаров по категориям</h3>
+            <app-skeleton v-if="isLoading" width="100%" height="100%"></app-skeleton>
+            <app-chart v-else ref="stockChart" type="doughnut" :data="productsStockData" :options="doughnutChartOptions"
               class="h-full" />
           </div>
         </div>

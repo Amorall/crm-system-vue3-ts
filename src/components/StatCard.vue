@@ -25,7 +25,6 @@ const props = defineProps({
   isUnits: Boolean
 })
 
-// Вычисляемое свойство для отображения значения
 const displayValue = computed(() => {
   if (props.isPercentage) return `${props.value}%`
   if (props.isUnits) return `${props.value} поз.`

@@ -36,6 +36,7 @@ import SelectButton from 'primevue/selectbutton';
 import InputGroup from 'primevue/inputgroup';
 import InputGroupAddon from 'primevue/inputgroupaddon';
 import FileUpload from 'primevue/fileupload';
+import Skeleton from 'primevue/skeleton'
 import Tooltip from 'primevue/tooltip';
 
 import App from './App.vue'
@@ -116,6 +117,7 @@ app.component('app-selectbutton', SelectButton)
 app.component('app-inputgroup', InputGroup)
 app.component('app-inputgroupaddon', InputGroupAddon)
 app.component('app-fileupload', FileUpload)
+app.component('app-skeleton', Skeleton)
 
 app.directive('tooltip', Tooltip);
 
